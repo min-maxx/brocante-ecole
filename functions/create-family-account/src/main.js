@@ -14,7 +14,9 @@ const requiredEnvironment = [
 function getAppwriteServices() {
   const missing = requiredEnvironment.filter((name) => !process.env[name]);
   if (missing.length) {
-    throw new Error(`Missing function configuration: ${missing.join(", ")}`);
+    const configurationError = new Error(`Missing function configuration: ${missing.join(", ")}`);
+    configurationError.name = "ConfigurationError";
+    throw configurationError;
   }
 
   const endpoint = process.env.APPWRITE_FUNCTION_API_ENDPOINT;
@@ -86,7 +88,8 @@ export default async function ({ req, res, error }) {
     return await createFamilyAccountHandler(getAppwriteServices())({ req, res, error });
   } catch (cause) {
     const reason = cause instanceof Error ? cause.name : "UnknownError";
-    error(`La fonction de création de compte est indisponible (${reason}).`);
+    const detail = reason === "ConfigurationError" ? `: ${cause.message}` : "";
+    error(`La fonction de création de compte est indisponible (${reason}${detail}).`);
     return res.json({ code: "internal_error", message: "Le service d’inscription est indisponible." }, 500);
   }
 }
