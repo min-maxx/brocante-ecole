@@ -64,7 +64,9 @@ export function createFamilyAccountHandler({
           }, 400);
         }
         const reason = cause instanceof Error ? cause.name : "UnknownError";
-        error(`La finalisation du compte famille a échoué (${reason}).`);
+        const appwriteStage = cause?.appwriteStage ? ` à l’étape "${cause.appwriteStage}"` : "";
+        const appwriteDetail = cause?.type ? ` [${cause.code} ${cause.type}${appwriteStage}]` : "";
+        error(`La finalisation du compte famille a échoué (${reason}${appwriteDetail}).`);
         return res.json({ code: "internal_error", message: "La création du compte a échoué." }, 500);
       }
     }
@@ -115,7 +117,8 @@ export function createFamilyAccountHandler({
     } catch (cause) {
       const reason = cause instanceof Error ? cause.name : "UnknownError";
       const scopeDetail = cause?.type === "general_unauthorized_scope" ? ` ${cause.message}` : "";
-      const appwriteDetail = cause?.type ? ` [${cause.code} ${cause.type}${scopeDetail}]` : "";
+      const appwriteStage = cause?.appwriteStage ? ` à l’étape "${cause.appwriteStage}"` : "";
+      const appwriteDetail = cause?.type ? ` [${cause.code} ${cause.type}${scopeDetail}${appwriteStage}]` : "";
       error(`La préparation du compte famille a échoué (${reason}${appwriteDetail}).`);
       return res.json({ code: "internal_error", message: "La création du compte a échoué." }, 500);
     }

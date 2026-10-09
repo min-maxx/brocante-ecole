@@ -10,6 +10,19 @@ const requiredEnvironment = [
   "APPWRITE_SIGNUP_CALLBACK_URL",
 ];
 
+async function withAppwriteStage(stage, operation) {
+  try {
+    return await operation();
+  } catch (cause) {
+    const wrapped = new Error("Appwrite request failed", { cause });
+    wrapped.name = cause instanceof Error ? cause.name : "Error";
+    wrapped.code = cause?.code;
+    wrapped.type = cause?.type;
+    wrapped.appwriteStage = stage;
+    throw wrapped;
+  }
+}
+
 function getAppwriteServices(req) {
   // Appwrite fournit la clé dynamique à l’exécution dans cet en-tête.
   const apiKey = req.headers?.["x-appwrite-key"] || process.env.APPWRITE_FUNCTION_API_KEY;
@@ -31,11 +44,11 @@ function getAppwriteServices(req) {
   const users = new Users(client);
 
   const isAuthorized = async (email) => {
-    const result = await tablesDB.listRows({
+    const result = await withAppwriteStage("allowlist lookup", () => tablesDB.listRows({
       databaseId: process.env.APPWRITE_DATABASE_ID,
       tableId: process.env.APPWRITE_ALLOWLIST_TABLE_ID,
       queries: [Query.equal("email", [email]), Query.limit(1)],
-    });
+    }));
     return result.rows.length > 0;
   };
 
@@ -46,43 +59,43 @@ function getAppwriteServices(req) {
   return {
     isAuthorized,
     findUserByEmail: async (email) => {
-      const result = await users.list({
+      const result = await withAppwriteStage("existing account lookup", () => users.list({
         queries: [Query.equal("email", [email]), Query.limit(1)],
         total: false,
-      });
+      }));
       const user = result.users[0];
       return user ? { userId: user.$id, emailVerification: user.emailVerification } : null;
     },
-    createUser: (email) => users.create({
+    createUser: (email) => withAppwriteStage("account creation", () => users.create({
       userId: ID.unique(),
       email,
-    }),
+    })),
     sendVerification: async (userId, email) => {
       const temporaryPassword = randomBytes(32).toString("base64url");
-      await users.updatePassword({ userId, password: temporaryPassword });
+      await withAppwriteStage("temporary password update", () => users.updatePassword({ userId, password: temporaryPassword }));
 
-      const session = await users.createSession({ userId });
+      const session = await withAppwriteStage("temporary session creation", () => users.createSession({ userId }));
       try {
         const sessionAccount = new Account(createSessionClient().setSession(session.secret));
-        await sessionAccount.createEmailVerification({
+        await withAppwriteStage("verification email request", () => sessionAccount.createEmailVerification({
           url: process.env.APPWRITE_SIGNUP_CALLBACK_URL,
-        });
+        }));
       } finally {
-        await users.deleteSession({ userId, sessionId: session.$id });
+        await withAppwriteStage("temporary session cleanup", () => users.deleteSession({ userId, sessionId: session.$id }));
       }
     },
     completeRegistration: async (userId, secret, password) => {
-      const user = await users.get({ userId });
+      const user = await withAppwriteStage("account lookup during verification", () => users.get({ userId }));
       if (!await isAuthorized(normalizeEmail(user.email))) return null;
 
-      const session = await users.createSession({ userId });
+      const session = await withAppwriteStage("verification session creation", () => users.createSession({ userId }));
       try {
         const sessionAccount = new Account(createSessionClient().setSession(session.secret));
-        await sessionAccount.updateEmailVerification({ userId, secret });
+        await withAppwriteStage("email verification", () => sessionAccount.updateEmailVerification({ userId, secret }));
       } finally {
-        await users.deleteSession({ userId, sessionId: session.$id });
+        await withAppwriteStage("verification session cleanup", () => users.deleteSession({ userId, sessionId: session.$id }));
       }
-      await users.updatePassword({ userId, password });
+      await withAppwriteStage("final password update", () => users.updatePassword({ userId, password }));
       return { email: user.email };
     },
   };
