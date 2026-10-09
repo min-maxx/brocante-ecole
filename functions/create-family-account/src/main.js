@@ -5,14 +5,16 @@ import { createFamilyAccountHandler, normalizeEmail } from "./registration.js";
 const requiredEnvironment = [
   "APPWRITE_FUNCTION_API_ENDPOINT",
   "APPWRITE_FUNCTION_PROJECT_ID",
-  "APPWRITE_FUNCTION_API_KEY",
   "APPWRITE_DATABASE_ID",
   "APPWRITE_ALLOWLIST_TABLE_ID",
   "APPWRITE_SIGNUP_CALLBACK_URL",
 ];
 
-function getAppwriteServices() {
+function getAppwriteServices(req) {
+  // Appwrite fournit la clé dynamique à l’exécution dans cet en-tête.
+  const apiKey = req.headers?.["x-appwrite-key"] || process.env.APPWRITE_FUNCTION_API_KEY;
   const missing = requiredEnvironment.filter((name) => !process.env[name]);
+  if (!apiKey) missing.push("x-appwrite-key (activez des scopes sur la fonction)");
   if (missing.length) {
     const configurationError = new Error(`Missing function configuration: ${missing.join(", ")}`);
     configurationError.name = "ConfigurationError";
@@ -24,7 +26,7 @@ function getAppwriteServices() {
   const client = new Client()
     .setEndpoint(endpoint)
     .setProject(projectId)
-    .setKey(process.env.APPWRITE_FUNCTION_API_KEY);
+    .setKey(apiKey);
   const tablesDB = new TablesDB(client);
   const users = new Users(client);
 
@@ -85,7 +87,7 @@ function getAppwriteServices() {
 
 export default async function ({ req, res, error }) {
   try {
-    return await createFamilyAccountHandler(getAppwriteServices())({ req, res, error });
+    return await createFamilyAccountHandler(getAppwriteServices(req))({ req, res, error });
   } catch (cause) {
     const reason = cause instanceof Error ? cause.name : "UnknownError";
     const detail = reason === "ConfigurationError" ? `: ${cause.message}` : "";
