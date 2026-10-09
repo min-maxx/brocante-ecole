@@ -61,24 +61,27 @@ function getAppwriteServices(req) {
       const temporaryPassword = randomBytes(32).toString("base64url");
       await users.updatePassword({ userId, password: temporaryPassword });
 
-      const session = await new Account(createSessionClient()).createEmailPasswordSession({
-        email,
-        password: temporaryPassword,
-      });
-      const sessionAccount = new Account(createSessionClient().setSession(session.secret));
+      const session = await users.createSession({ userId });
       try {
+        const sessionAccount = new Account(createSessionClient().setSession(session.secret));
         await sessionAccount.createEmailVerification({
           url: process.env.APPWRITE_SIGNUP_CALLBACK_URL,
         });
       } finally {
-        await sessionAccount.deleteSession({ sessionId: "current" });
+        await users.deleteSession({ userId, sessionId: session.$id });
       }
     },
     completeRegistration: async (userId, secret, password) => {
       const user = await users.get({ userId });
       if (!await isAuthorized(normalizeEmail(user.email))) return null;
 
-      await new Account(createSessionClient()).updateEmailVerification({ userId, secret });
+      const session = await users.createSession({ userId });
+      try {
+        const sessionAccount = new Account(createSessionClient().setSession(session.secret));
+        await sessionAccount.updateEmailVerification({ userId, secret });
+      } finally {
+        await users.deleteSession({ userId, sessionId: session.$id });
+      }
       await users.updatePassword({ userId, password });
       return { email: user.email };
     },
