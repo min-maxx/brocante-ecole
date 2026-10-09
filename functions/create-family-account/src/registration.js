@@ -114,7 +114,8 @@ export function createFamilyAccountHandler({
       }
     } catch (cause) {
       const reason = cause instanceof Error ? cause.name : "UnknownError";
-      const appwriteDetail = cause?.type ? ` [${cause.code} ${cause.type}]` : "";
+      const scopeDetail = cause?.type === "general_unauthorized_scope" ? ` ${cause.message}` : "";
+      const appwriteDetail = cause?.type ? ` [${cause.code} ${cause.type}${scopeDetail}]` : "";
       error(`La préparation du compte famille a échoué (${reason}${appwriteDetail}).`);
       return res.json({ code: "internal_error", message: "La création du compte a échoué." }, 500);
     }
