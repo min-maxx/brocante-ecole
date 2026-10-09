@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f7f5ef" />
+    <title>Créer un compte — Le petit marché</title>
+  </head>
+  <body>
+    <main class="signup">
+      <a class="back-link" href="/" aria-label="Retour à l’accueil">← Le petit marché</a>
+      <section class="signup-card" aria-labelledby="signup-title">
+        <p class="eyebrow">Le marché des familles de l’école</p>
+        <h1 id="signup-title">Créer votre compte</h1>
+        <p class="intro">Inscrivez-vous avec l’adresse communiquée à l’APEL pour rejoindre le marché.</p>
+        <form id="email-form" novalidate>
+          <label for="email">Adresse e-mail autorisée</label>
+          <input id="email" name="email" type="email" autocomplete="email" maxlength="254" required />
+          <button id="email-submit" type="submit">Recevoir ou renvoyer un lien de confirmation</button>
+        </form>
+
+        <form id="password-form" hidden>
+          <p class="intro">Votre adresse est confirmée. Choisissez maintenant le mot de passe de votre compte personnel.</p>
+          <label for="password">Mot de passe</label>
+          <input id="password" name="password" type="password" autocomplete="new-password" minlength="8" maxlength="256" required />
+          <p class="field-hint">8 caractères minimum.</p>
+
+          <label for="password-confirmation">Confirmer le mot de passe</label>
+          <input id="password-confirmation" name="passwordConfirmation" type="password" autocomplete="new-password" minlength="8" maxlength="256" required />
+
+          <label class="personal-account">
+            <input name="personalAccount" type="checkbox" required />
+            <span>Je comprends que ce compte est personnel et ne doit pas être partagé avec les autres membres de mon foyer.</span>
+          </label>
+
+          <button id="password-submit" type="submit">Finaliser la création du compte</button>
+        </form>
+        <p id="form-message" class="message" role="status" aria-live="polite"></p>
+        <p class="eligibility-note">Votre adresse n’est pas autorisée ? Contactez l’APEL pour vérifier votre inscription.</p>
+      </section>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
