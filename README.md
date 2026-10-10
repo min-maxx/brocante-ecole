@@ -18,18 +18,26 @@ Conformément à l’ADR-0003, ne chargez aucune adresse réelle et n’ouvrez p
 4. Créez une fonction Node.js 22 nommée `create-family-account`, avec `functions/create-family-account` comme répertoire racine, `src/main.js` comme point d’entrée et `npm install` comme commande de construction. Dans **Functions → `create-family-account` → Security → Permissions**, autorisez **All guests** afin que les visiteurs non connectés puissent l’appeler; la fonction applique elle-même la liste autorisée à chaque action. Après toute modification de cette permission, redéployez la fonction pour que le déploiement actif la prenne en compte.
 5. Limitez les portées de la clé éphémère de la fonction à la lecture des lignes de la table et des comptes, ainsi qu’à la création et à la mise à jour des comptes utilisateurs (`rows.read`, `users.read`, `users.write`). Configurez `APPWRITE_DATABASE_ID`, `APPWRITE_ALLOWLIST_TABLE_ID` et `APPWRITE_SIGNUP_CALLBACK_URL` dans la fonction. Cette dernière est l’URL complète du site de retour, par exemple `https://brocante-esmj.appwrite.network/`; son hostname (`brocante-esmj.appwrite.network`) doit être enregistré comme plateforme Web à l’étape 1. `APPWRITE_FUNCTION_API_ENDPOINT`, `APPWRITE_FUNCTION_PROJECT_ID` et `APPWRITE_FUNCTION_API_KEY` sont fournies par Appwrite.
 6. Vérifiez que le hostname utilisé par `APPWRITE_SIGNUP_CALLBACK_URL` est bien enregistré dans les plateformes Web du même projet Appwrite que la fonction; sinon Appwrite rejettera le lien de vérification.
+7. Créez une collection `listings` dans cette base, avec la sécurité des documents activée et les attributs suivants : `title` (chaîne, 70, requis), `description` (chaîne, 500, requise), `category` (chaîne, 30, requise), `condition` (chaîne, 20, requise), `ageGroups` (tableau d’entiers, requis), `sizes` (tableau de chaînes, requis), `color` (chaîne, 20, requise), `brand` (chaîne, 70, requis), `price` (entier, requis), et `photoIds` (tableau de chaînes, requis). Le formulaire envoie toujours `description` et `brand`; quand leur valeur est facultative et omise, il envoie une chaîne vide pour satisfaire la présence des attributs requis. Autorisez la lecture aux utilisateurs connectés et la création aux utilisateurs connectés au niveau de la collection; les droits de mise à jour et de suppression sont attribués à la personne propriétaire sur chaque document.
+8. Créez un bucket `listing-photos` avec la sécurité des fichiers activée. Autorisez la lecture et la création aux utilisateurs connectés au niveau du bucket; chaque fichier publié est modifiable ou supprimable uniquement par son propriétaire.
 
-Les identifiants de la base, de la table et de la fonction sont des paramètres Appwrite, non des secrets. Le navigateur a uniquement besoin des paramètres publics dans `.env.local`.
+Les champs d’une annonce et ses photos sont accessibles aux familles connectées qui consultent le marché. Les identifiants de la base, de la collection, du bucket et de la fonction sont des paramètres Appwrite, non des secrets. Le navigateur a uniquement besoin des paramètres publics dans `.env.local` :
+
+```sh
+VITE_APPWRITE_DATABASE_ID=
+VITE_APPWRITE_LISTINGS_COLLECTION_ID=
+VITE_APPWRITE_LISTING_PHOTOS_BUCKET_ID=
+```
 
 ## Développement et vérification
 
 ```sh
 npm install
 cp .env.example .env.local
-# Renseigner VITE_APPWRITE_PROJECT_ID et VITE_APPWRITE_SIGNUP_FUNCTION_ID
+# Renseigner les identifiants Appwrite publics dans .env.local
 npm run dev
 ```
 
-Le champ `VITE_APPWRITE_ENDPOINT` pointe par défaut vers la région Frankfurt. Lancez `npm test` pour les tests de validation et de contrôle de la liste, et `npm run build` pour vérifier la compilation du site.
+Le champ `VITE_APPWRITE_ENDPOINT` pointe par défaut vers la région Frankfurt. Lancez `npm test` pour les tests de validation de l’inscription, `npm run test:e2e` pour le parcours navigateur complet des annonces (Appwrite est simulé), et `npm run build` pour vérifier la compilation du site. Le test navigateur nécessite une installation initiale de Chromium avec `npx playwright install chromium`.
 
 Avant d’ouvrir l’inscription aux familles, importez une liste de test, vérifiez le refus d’une adresse absente, confirmez la réception et l’utilisation du lien de vérification, puis contrôlez qu’une seconde création avec la même adresse est refusée.
