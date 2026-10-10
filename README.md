@@ -104,11 +104,31 @@ Configurez ces variables dans la fonction :
 Le hostname de `APPWRITE_SIGNUP_CALLBACK_URL` (par exemple `brocante-esmj.appwrite.network`) doit être enregistré comme plateforme Web à l’étape 1 **dans le même projet Appwrite que la fonction**. Sans cela, Appwrite rejettera le lien de vérification.
 
 <a id="configuration-annonces-photos"></a>
-## 🗂️ Configurer les annonces et les photos
+## 🗂️ Provisionner les annonces et les photos
 
-### Collection `listings`
+Les ressources du marché se créent depuis le répertoire isolé [`provisioning/`](./provisioning/), à l’écart du code de l’application. Le script utilise le Server SDK Appwrite, crée les ressources manquantes et laisse intactes celles déjà configurées. Si une collection ou un bucket existe mais ne correspond pas au schéma attendu, il s’arrête avec une erreur plutôt que de le modifier ou supprimer.
 
-Dans la même base de données, créez une collection `listings` avec la **sécurité des documents activée** et les attributs suivants :
+```sh
+cp provisioning/.env.example provisioning/.env
+# Renseigner les valeurs ci-dessous dans provisioning/.env
+npm install --prefix provisioning
+npm run setup --prefix provisioning
+```
+
+`provisioning/.env` est ignoré par Git. Créez une clé API Appwrite temporaire avec les portées de lecture et d’écriture nécessaires sur les bases, collections, attributs et buckets ; ne mettez jamais cette clé dans `.env.local`, dans une variable `VITE_` ou dans le dépôt.
+
+| Variable | Valeur |
+| --- | --- |
+| `APPWRITE_ENDPOINT` | Endpoint du projet, par défaut `https://fra.cloud.appwrite.io/v1` |
+| `APPWRITE_PROJECT_ID` | Identifiant du projet Appwrite |
+| `APPWRITE_API_KEY` | Clé de provisionnement secrète à durée de vie limitée |
+| `APPWRITE_DATABASE_ID` | Identifiant de la base à créer ou réutiliser |
+| `APPWRITE_LISTINGS_COLLECTION_ID` | Identifiant de la collection, prérempli à `listings` dans l’exemple |
+| `APPWRITE_LISTING_PHOTOS_BUCKET_ID` | Identifiant du bucket, prérempli à `listing-photos` dans l’exemple |
+
+Le script crée la base si elle n’existe pas, puis la collection `listings` avec la **sécurité des documents activée** et le bucket `listing-photos` avec la **sécurité des fichiers activée**. Il configure la lecture et la création pour les utilisateurs connectés ; l’application donne ensuite les droits de mise à jour et de suppression au propriétaire de chaque annonce et de chaque photo. Si la base est déjà utilisée pour la liste privée d’adresses autorisées, renseignez exactement le même `APPWRITE_DATABASE_ID` que celui configuré dans la fonction d’inscription.
+
+### Schéma de la collection `listings`
 
 | Attribut | Type et limite | Requis |
 | --- | --- | :---: |
@@ -125,12 +145,6 @@ Dans la même base de données, créez une collection `listings` avec la **sécu
 
 Le formulaire envoie toujours `description` et `brand`. Si leur valeur est facultative et omise, il envoie une chaîne vide afin que les attributs requis soient présents.
 
-Au niveau de la collection, autorisez la lecture et la création aux utilisateurs connectés. Sur chaque document, les droits de mise à jour et de suppression sont accordés à la personne propriétaire.
-
-### Bucket `listing-photos`
-
-Créez un bucket `listing-photos` avec la **sécurité des fichiers activée**. Au niveau du bucket, autorisez la lecture et la création aux utilisateurs connectés. Chaque fichier publié est modifiable ou supprimable uniquement par son propriétaire.
-
 Les champs des annonces et les photos sont accessibles aux familles connectées qui consultent le marché.
 
 ### Variables publiques du navigateur
@@ -142,7 +156,7 @@ Les identifiants Appwrite de la base, de la collection, du bucket et de la fonct
 | `VITE_APPWRITE_ENDPOINT` | Endpoint Appwrite ; Frankfurt par défaut (`https://fra.cloud.appwrite.io/v1`) |
 | `VITE_APPWRITE_PROJECT_ID` | Identifiant du projet |
 | `VITE_APPWRITE_SIGNUP_FUNCTION_ID` | Identifiant de la fonction `create-family-account` |
-| `VITE_APPWRITE_DATABASE_ID` | Identifiant de la base des annonces |
+| `VITE_APPWRITE_DATABASE_ID` | Même identifiant de base que `APPWRITE_DATABASE_ID` |
 | `VITE_APPWRITE_LISTINGS_COLLECTION_ID` | Identifiant de la collection `listings` |
 | `VITE_APPWRITE_LISTING_PHOTOS_BUCKET_ID` | Identifiant du bucket `listing-photos` |
 
@@ -158,7 +172,7 @@ npm run dev
 
 | Commande | Vérification |
 | --- | --- |
-| `npm test` | Tests de validation de l’inscription et de la liste d’adresses autorisées |
+| `npm test` | Tests d’inscription, de la liste d’adresses autorisées et du schéma de provisionnement |
 | `npm run test:e2e` | Parcours navigateur complet des annonces, avec Appwrite simulé |
 | `npm run build` | Compilation de production |
 
