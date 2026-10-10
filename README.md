@@ -1,35 +1,153 @@
-# Le petit marché
+# 🧺 Le petit marché
 
-Application web pour l’inscription au marché scolaire, avec création de compte Appwrite protégée par la liste des adresses autorisées gérée par l’APEL.
+Le marché de petites annonces de l’école : les familles peuvent y proposer et obtenir des biens personnels dans les catégories **vêtements**, **livres**, **jeux et jouets** et **matériel scolaire**. Les ventes sont occasionnelles, entre particuliers. Les vendeurs professionnels et les annonces commerciales sont exclus.
 
-## Fonctionnement de l’inscription
+> [!IMPORTANT]
+> **Avant d’ouvrir le marché aux familles :** conformément à l’[ADR-0003](./docs/adr/0003-hebergement-mvp-appwrite-francfort.md), l’APEL doit vérifier les contrats, les sous-traitants et les traitements liés aux courriels système. N’importez aucune adresse réelle et n’ouvrez pas l’inscription tant que cette vérification n’est pas terminée.
 
-Le navigateur envoie l’adresse à une Appwrite Function publique. La fonction normalise l’adresse, vérifie sa présence dans la table privée de l’APEL, puis crée un compte dont le mot de passe initial est aléatoire et temporaire. Elle ouvre une session temporaire côté serveur pour faire envoyer par Appwrite le lien de vérification d’adresse, puis révoque cette session. Après l’ouverture du lien, le navigateur transmet le secret de vérification et le mot de passe choisi à la fonction. Celle-ci vérifie le secret, revalide l’adresse sur la liste de l’APEL, puis enregistre le mot de passe. Ainsi, la personne qui demande l’inscription ne peut pas choisir le mot de passe avant que la boîte aux lettres autorisée soit vérifiée.
+## 🧭 Repères
 
-L’inscription native des utilisateurs doit rester désactivée dans les paramètres du projet Appwrite : les comptes ne doivent être créés que par cette fonction. Activez la connexion e-mail/mot de passe pour les sessions temporaires et futures; désactivez les méthodes comme Magic URL et les codes e-mail qui créent automatiquement des comptes hors de la fonction d’autorisation. Une adresse autorisée correspond à un seul compte Appwrite; une inscription non vérifiée peut redemander un lien. L’interface demande à la personne de reconnaître que son compte est individuel et ne doit pas être partagé. Cette règle ne peut pas empêcher techniquement le partage volontaire d’un mot de passe.
+- [Comment fonctionne l’inscription](#inscription)
+- [Configurer Appwrite](#configuration-appwrite)
+- [Configurer les annonces et les photos](#configuration-annonces-photos)
+- [Développer et tester](#developpement-tests)
+- [Vocabulaire du marché](#vocabulaire)
 
-## Configuration Appwrite
+<a id="inscription"></a>
+## 🔐 Comment fonctionne l’inscription
 
-Conformément à l’ADR-0003, ne chargez aucune adresse réelle et n’ouvrez pas l’inscription aux familles tant que les contrats, sous-traitants et traitements liés aux courriels système n’ont pas été vérifiés par l’APEL.
-
-1. Créez un projet Appwrite Cloud dans la région Frankfurt (`fra`). Dans la console, ouvrez **Overview → Integrations → Add platform → Web App**. Dans le champ **Hostname**, ajoutez le domaine de production et `localhost` pour le développement, sans `https://`, sans port et sans chemin (par exemple `brocante-esmj.appwrite.network` et `localhost`).
-2. Désactivez l’inscription autonome des utilisateurs et les méthodes de connexion qui créent automatiquement des comptes (notamment Magic URL et les codes e-mail). Activez e-mail/mot de passe, utilisé pour les sessions temporaires et la connexion après inscription.
-3. Créez une base de données et une table privée pour les adresses autorisées. Ajoutez une colonne `email` de type chaîne, requise, et un index unique sur cette colonne. N’accordez aucun accès public aux lignes. Importez les adresses en minuscules; ne les placez jamais dans le code ou dans ce dépôt.
-4. Créez une fonction Node.js 22 nommée `create-family-account`, avec `functions/create-family-account` comme répertoire racine, `src/main.js` comme point d’entrée et `npm install` comme commande de construction. Dans **Functions → `create-family-account` → Security → Permissions**, autorisez **All guests** afin que les visiteurs non connectés puissent l’appeler; la fonction applique elle-même la liste autorisée à chaque action. Après toute modification de cette permission, redéployez la fonction pour que le déploiement actif la prenne en compte.
-5. Limitez les portées de la clé éphémère de la fonction à la lecture des lignes de la table et des comptes, ainsi qu’à la création et à la mise à jour des comptes utilisateurs (`rows.read`, `users.read`, `users.write`). Configurez `APPWRITE_DATABASE_ID`, `APPWRITE_ALLOWLIST_TABLE_ID` et `APPWRITE_SIGNUP_CALLBACK_URL` dans la fonction. Cette dernière est l’URL complète du site de retour, par exemple `https://brocante-esmj.appwrite.network/`; son hostname (`brocante-esmj.appwrite.network`) doit être enregistré comme plateforme Web à l’étape 1. `APPWRITE_FUNCTION_API_ENDPOINT`, `APPWRITE_FUNCTION_PROJECT_ID` et `APPWRITE_FUNCTION_API_KEY` sont fournies par Appwrite.
-6. Vérifiez que le hostname utilisé par `APPWRITE_SIGNUP_CALLBACK_URL` est bien enregistré dans les plateformes Web du même projet Appwrite que la fonction; sinon Appwrite rejettera le lien de vérification.
-7. Créez une collection `listings` dans cette base, avec la sécurité des documents activée et les attributs suivants : `title` (chaîne, 70, requis), `description` (chaîne, 500, requise), `category` (chaîne, 30, requise), `condition` (chaîne, 20, requise), `ageGroups` (tableau d’entiers, requis), `sizes` (tableau de chaînes, requis), `color` (chaîne, 20, requise), `brand` (chaîne, 70, requis), `price` (entier, requis), et `photoIds` (tableau de chaînes, requis). Le formulaire envoie toujours `description` et `brand`; quand leur valeur est facultative et omise, il envoie une chaîne vide pour satisfaire la présence des attributs requis. Autorisez la lecture aux utilisateurs connectés et la création aux utilisateurs connectés au niveau de la collection; les droits de mise à jour et de suppression sont attribués à la personne propriétaire sur chaque document.
-8. Créez un bucket `listing-photos` avec la sécurité des fichiers activée. Autorisez la lecture et la création aux utilisateurs connectés au niveau du bucket; chaque fichier publié est modifiable ou supprimable uniquement par son propriétaire.
-
-Les champs d’une annonce et ses photos sont accessibles aux familles connectées qui consultent le marché. Les identifiants de la base, de la collection, du bucket et de la fonction sont des paramètres Appwrite, non des secrets. Le navigateur a uniquement besoin des paramètres publics dans `.env.local` :
-
-```sh
-VITE_APPWRITE_DATABASE_ID=
-VITE_APPWRITE_LISTINGS_COLLECTION_ID=
-VITE_APPWRITE_LISTING_PHOTOS_BUCKET_ID=
+```text
+Adresse e-mail
+    │
+    ▼
+Fonction Appwrite ── vérifie l’adresse dans la liste privée de l’APEL
+    │
+    ├── Adresse absente ── refuse l’inscription
+    │
+    └── Adresse autorisée
+          ├── crée un compte avec un mot de passe temporaire aléatoire
+          ├── ouvre une session temporaire pour envoyer le lien de vérification
+          └── révoque cette session
+                    │
+                    ▼
+       Lien ouvert · secret vérifié · adresse revalidée
+                    │
+                    ▼
+       La famille choisit son mot de passe et se connecte
 ```
 
-## Développement et vérification
+Le navigateur envoie l’adresse à une Appwrite Function publique. Après ouverture du lien, il transmet à la fonction le secret de vérification et le mot de passe choisi. La fonction vérifie le secret, revalide l’adresse dans la liste de l’APEL, puis enregistre le mot de passe. La personne ne peut donc pas choisir son mot de passe avant que la boîte aux lettres autorisée soit vérifiée.
+
+> **Réglages de sécurité Appwrite**
+>
+> - Désactivez l’inscription autonome : les comptes doivent être créés uniquement par cette fonction.
+> - Activez la connexion par e-mail et mot de passe pour les sessions temporaires et la connexion après inscription.
+> - Désactivez les méthodes qui créent automatiquement des comptes en dehors du contrôle d’autorisation, notamment Magic URL et les codes e-mail.
+> - Une adresse autorisée correspond à un seul compte Appwrite. Une inscription non vérifiée peut demander un nouveau lien.
+> - Le compte est individuel et ne doit pas être partagé au sein du foyer. L’interface le rappelle, mais ne peut pas empêcher le partage volontaire d’un mot de passe.
+
+<a id="configuration-appwrite"></a>
+## ⚙️ Configurer Appwrite
+
+### 1. Créer le projet et enregistrer les plateformes Web
+
+Créez un projet Appwrite Cloud dans la région Frankfurt (`fra`). Dans la console, ouvrez **Overview → Integrations → Add platform → Web App**. Dans le champ **Hostname**, ajoutez le domaine de production et `localhost` pour le développement. Saisissez le hostname sans `https://`, sans port et sans chemin, par exemple `brocante-esmj.appwrite.network` et `localhost`.
+
+### 2. Configurer les méthodes de connexion
+
+Désactivez l’inscription autonome et les méthodes qui créent automatiquement des comptes, dont Magic URL et les codes e-mail. Activez la connexion par e-mail et mot de passe.
+
+### 3. Créer la liste privée des adresses autorisées
+
+Créez une base de données et une table privée pour les adresses autorisées :
+
+- ajoutez la colonne `email`, de type chaîne et obligatoire ;
+- créez un index unique sur `email` ;
+- n’accordez aucun accès public aux lignes ;
+- importez les adresses en minuscules.
+
+> Ne placez jamais d’adresses de familles dans le code source ni dans ce dépôt.
+
+### 4. Déployer la fonction de création de compte
+
+Créez une fonction **Node.js 22** nommée `create-family-account`, avec cette configuration :
+
+| Réglage | Valeur |
+| --- | --- |
+| Répertoire racine | `functions/create-family-account` |
+| Point d’entrée | `src/main.js` |
+| Commande de construction | `npm install` |
+
+Dans **Functions → `create-family-account` → Security → Permissions**, autorisez **All guests** afin que les visiteurs non connectés puissent appeler la fonction. Elle vérifie elle-même l’autorisation pour chaque action. **Après toute modification de cette permission, redéployez la fonction** pour appliquer le changement au déploiement actif.
+
+### 5. Limiter les portées et configurer la fonction
+
+Limitez les portées de la clé éphémère aux permissions suivantes :
+
+| Portée | Utilisation |
+| --- | --- |
+| `rows.read` | Lire les lignes de la liste d’adresses autorisées |
+| `users.read` | Vérifier les comptes |
+| `users.write` | Créer et mettre à jour les comptes |
+
+Configurez ces variables dans la fonction :
+
+| Variable | Description |
+| --- | --- |
+| `APPWRITE_DATABASE_ID` | Identifiant de la base de données |
+| `APPWRITE_ALLOWLIST_TABLE_ID` | Identifiant de la table privée des adresses autorisées |
+| `APPWRITE_SIGNUP_CALLBACK_URL` | URL complète du site de retour, par exemple `https://brocante-esmj.appwrite.network/` |
+| `APPWRITE_FUNCTION_API_ENDPOINT` | Fournie par Appwrite |
+| `APPWRITE_FUNCTION_PROJECT_ID` | Fournie par Appwrite |
+| `APPWRITE_FUNCTION_API_KEY` | Fournie par Appwrite |
+
+Le hostname de `APPWRITE_SIGNUP_CALLBACK_URL` (par exemple `brocante-esmj.appwrite.network`) doit être enregistré comme plateforme Web à l’étape 1 **dans le même projet Appwrite que la fonction**. Sans cela, Appwrite rejettera le lien de vérification.
+
+<a id="configuration-annonces-photos"></a>
+## 🗂️ Configurer les annonces et les photos
+
+### Collection `listings`
+
+Dans la même base de données, créez une collection `listings` avec la **sécurité des documents activée** et les attributs suivants :
+
+| Attribut | Type et limite | Requis |
+| --- | --- | :---: |
+| `title` | Chaîne, 70 caractères | Oui |
+| `description` | Chaîne, 500 caractères | Oui |
+| `category` | Chaîne, 30 caractères | Oui |
+| `condition` | Chaîne, 20 caractères | Oui |
+| `ageGroups` | Tableau d’entiers | Oui |
+| `sizes` | Tableau de chaînes | Oui |
+| `color` | Chaîne, 20 caractères | Oui |
+| `brand` | Chaîne, 70 caractères | Oui |
+| `price` | Entier | Oui |
+| `photoIds` | Tableau de chaînes | Oui |
+
+Le formulaire envoie toujours `description` et `brand`. Si leur valeur est facultative et omise, il envoie une chaîne vide afin que les attributs requis soient présents.
+
+Au niveau de la collection, autorisez la lecture et la création aux utilisateurs connectés. Sur chaque document, les droits de mise à jour et de suppression sont accordés à la personne propriétaire.
+
+### Bucket `listing-photos`
+
+Créez un bucket `listing-photos` avec la **sécurité des fichiers activée**. Au niveau du bucket, autorisez la lecture et la création aux utilisateurs connectés. Chaque fichier publié est modifiable ou supprimable uniquement par son propriétaire.
+
+Les champs des annonces et les photos sont accessibles aux familles connectées qui consultent le marché.
+
+### Variables publiques du navigateur
+
+Les identifiants Appwrite de la base, de la collection, du bucket et de la fonction sont des paramètres publics, pas des secrets. Le navigateur a besoin des variables suivantes dans `.env.local` :
+
+| Variable | Valeur |
+| --- | --- |
+| `VITE_APPWRITE_ENDPOINT` | Endpoint Appwrite ; Frankfurt par défaut (`https://fra.cloud.appwrite.io/v1`) |
+| `VITE_APPWRITE_PROJECT_ID` | Identifiant du projet |
+| `VITE_APPWRITE_SIGNUP_FUNCTION_ID` | Identifiant de la fonction `create-family-account` |
+| `VITE_APPWRITE_DATABASE_ID` | Identifiant de la base des annonces |
+| `VITE_APPWRITE_LISTINGS_COLLECTION_ID` | Identifiant de la collection `listings` |
+| `VITE_APPWRITE_LISTING_PHOTOS_BUCKET_ID` | Identifiant du bucket `listing-photos` |
+
+<a id="developpement-tests"></a>
+## 🧪 Développer et tester
 
 ```sh
 npm install
@@ -38,6 +156,43 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Le champ `VITE_APPWRITE_ENDPOINT` pointe par défaut vers la région Frankfurt. Lancez `npm test` pour les tests de validation de l’inscription, `npm run test:e2e` pour le parcours navigateur complet des annonces (Appwrite est simulé), et `npm run build` pour vérifier la compilation du site. Le test navigateur nécessite une installation initiale de Chromium avec `npx playwright install chromium`.
+| Commande | Vérification |
+| --- | --- |
+| `npm test` | Tests de validation de l’inscription et de la liste d’adresses autorisées |
+| `npm run test:e2e` | Parcours navigateur complet des annonces, avec Appwrite simulé |
+| `npm run build` | Compilation de production |
 
-Avant d’ouvrir l’inscription aux familles, importez une liste de test, vérifiez le refus d’une adresse absente, confirmez la réception et l’utilisation du lien de vérification, puis contrôlez qu’une seconde création avec la même adresse est refusée.
+Le test navigateur nécessite une installation initiale de Chromium :
+
+```sh
+npx playwright install chromium
+```
+
+### Vérifications avant l’ouverture aux familles
+
+1. Importez une **liste de test**, jamais une liste réelle avant la vérification de conformité.
+2. Vérifiez qu’une adresse absente de la liste est refusée.
+3. Confirmez la réception et l’utilisation du lien de vérification.
+4. Vérifiez qu’une seconde création avec la même adresse est refusée.
+
+<a id="vocabulaire"></a>
+## 📖 Vocabulaire du marché
+
+| Terme | Définition |
+| --- | --- |
+| **Famille** | Famille de la communauté scolaire qui utilise le marché. |
+| **Adresse autorisée** | Adresse e-mail inscrite par l’APEL comme pouvant accéder au marché. |
+| **Compte personnel** | Compte individuel associé à une adresse autorisée, utilisé par une personne et non partagé avec les autres membres du foyer. Un changement d’adresse crée un nouveau compte. |
+| **Annonce** | Proposition d’un objet à prix affiché ou donné. Une annonce peut être disponible, en pause, réservée, vendue ou retirée. |
+| **Catégorie d’annonce** | Classe l’objet parmi les vêtements, livres, jeux et jouets ou le matériel scolaire. |
+| **État de l’objet** | Description normalisée choisie parmi Neuf, Très bon, Bon, Satisfaisant ou À réparer. |
+| **Conversation privée** | Échange entre deux familles pour poser des questions ou organiser la remise d’un objet. Elle ne constitue pas une demande d’achat et ne change pas la disponibilité de l’annonce. |
+| **Demande d’achat** | Demande par laquelle une famille indique vouloir acheter l’objet au prix affiché. Le vendeur doit l’accepter pour réserver l’annonce. |
+| **Offre de prix** | Proposition d’un acheteur inférieure au prix affiché. Le vendeur peut l’accepter, la refuser ou proposer un contre-montant. |
+| **Demande de don** | Demande d’une famille pour recevoir un objet gratuit. Le vendeur peut l’accepter ou la refuser. |
+| **Annonce disponible** | Annonce visible et ouverte aux nouvelles demandes. |
+| **Annonce en pause** | Annonce masquée à la demande du vendeur, qui peut la rendre disponible à nouveau. |
+| **Annonce retirée** | Annonce supprimée du marché par le vendeur avant l’échange. Elle ne peut pas être restaurée et reste consultable en lecture seule dans son historique privé. |
+| **Réservation** | Période pendant laquelle une annonce est masquée après un accord sur le prix dans l’application ou après acceptation d’une demande de don. Elle ne conclut pas la vente et n’oblige pas les familles à la réaliser : elles conviennent ensuite d’un rendez-vous et effectuent l’échange hors application. Le vendeur termine la réservation en marquant l’objet vendu ou en rendant l’annonce disponible si la vente n’a pas lieu. Sans action du vendeur, l’annonce reste réservée et masquée. |
+| **Annonce vendue** | Annonce que le vendeur marque comme terminée après l’échange. Elle disparaît du marché, ne peut pas être rendue disponible à nouveau et reste consultable en lecture seule dans l’historique privé du vendeur. |
+| **Récapitulatif quotidien** | Courriel facultatif signalant les événements personnels et les nouvelles annonces disponibles, sans inclure le contenu privé des messages ou des offres. |
