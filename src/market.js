@@ -17,6 +17,11 @@ const COLORS = [
 ];
 const CONDITIONS = ["Neuf", "Très bon", "Bon", "Satisfaisant", "À réparer"];
 const MAX_PHOTOS = 3;
+const SUGGESTION_MAX_LENGTH = {
+  brand: 70,
+  author: 70,
+  language: 40,
+};
 const CATEGORY_DETAILS = {
   "Vêtements": {
     icon: "👕",
@@ -200,7 +205,7 @@ export function createMarketplace({
 
   function suggestedInputMarkup(key, label, placeholder) {
     return `<div class="suggestion-field">
-      <input id="draft-${escapeHtml(key)}" name="${escapeHtml(key)}" value="${escapeHtml(draft[key])}" maxlength="70" placeholder="${escapeHtml(placeholder)}" autocomplete="off" aria-label="${escapeHtml(label)}" aria-autocomplete="list" aria-controls="suggestions-${escapeHtml(key)}" data-suggestion-key="${escapeHtml(key)}">
+      <input id="draft-${escapeHtml(key)}" name="${escapeHtml(key)}" value="${escapeHtml(draft[key])}" maxlength="${SUGGESTION_MAX_LENGTH[key]}" placeholder="${escapeHtml(placeholder)}" autocomplete="off" aria-label="${escapeHtml(label)}" aria-autocomplete="list" aria-controls="suggestions-${escapeHtml(key)}" data-suggestion-key="${escapeHtml(key)}">
       <button class="suggestion-toggle" type="button" data-action="toggle-suggestions" data-key="${escapeHtml(key)}" aria-label="Afficher les suggestions de ${escapeHtml(label.toLocaleLowerCase("fr"))}" aria-expanded="false">⌄</button>
       <ul class="suggestion-list" id="suggestions-${escapeHtml(key)}" role="listbox" hidden>${suggestionOptionsMarkup(key, draft[key])}</ul>
     </div>

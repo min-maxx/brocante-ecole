@@ -253,7 +253,7 @@ test("a family publishes a clothing listing and sees it in the uniform listing g
   }).toBe(1);
 });
 
-test("a family publishes a book with age, genre, author and language", async ({ page }) => {
+test("a family publishes a listing in the Livres category with age, genre, author and language", async ({ page }) => {
   const bookListings = [{
     ...existingListing(),
     $id: "existing-book",
@@ -277,7 +277,9 @@ test("a family publishes a book with age, genre, author and language", async ({ 
   await page.getByRole("textbox", { name: "Auteur ou autrice" }).fill("claude");
   await expect(page.getByRole("option", { name: "Claude Ponti" })).toBeVisible();
   await page.getByRole("option", { name: "Claude Ponti" }).click();
-  await page.getByRole("textbox", { name: "Langue" }).fill("fr");
+  const language = page.getByRole("textbox", { name: "Langue" });
+  await expect(language).toHaveAttribute("maxlength", "40");
+  await language.fill("fr");
   await expect(page.getByRole("option", { name: "Français" })).toBeVisible();
   await page.getByRole("option", { name: "Français" }).click();
   await page.getByLabel("Prix (€)").fill("0");
@@ -308,7 +310,7 @@ test("a family publishes a book with age, genre, author and language", async ({ 
   });
 });
 
-test("a family publishes a game with age, type and a reusable brand suggestion", async ({ page }) => {
+test("a family publishes a listing in the Jeux et jouets category with age, type and a brand suggestion", async ({ page }) => {
   const games = ["Janod", "JANOD"].map((brand, index) => ({
     ...existingListing(),
     $id: `existing-game-${index}`,
@@ -360,7 +362,7 @@ test("a family publishes a game with age, type and a reusable brand suggestion",
   });
 });
 
-test("a family publishes school supplies with classes derived from age and no class input", async ({ page }) => {
+test("a family publishes a listing in the Matériel scolaire category with classes derived from age", async ({ page }) => {
   const { published } = await installMarketplaceApi(page);
 
   await startListing(page, "Matériel scolaire");
