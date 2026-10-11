@@ -106,7 +106,7 @@ Le hostname de `APPWRITE_SIGNUP_CALLBACK_URL` (par exemple `brocante-esmj.appwri
 <a id="configuration-annonces-photos"></a>
 ## 🗂️ Provisionner les annonces et les photos
 
-Les ressources du marché se créent depuis le répertoire isolé [`provisioning/`](./provisioning/), à l’écart du code de l’application. Le script utilise le Server SDK Appwrite, crée les ressources manquantes et laisse intactes celles déjà configurées. Si une collection ou un bucket existe mais ne correspond pas au schéma attendu, il s’arrête avec une erreur plutôt que de le modifier ou supprimer.
+Les ressources du marché se créent depuis le répertoire isolé [`provisioning/`](./provisioning/), à l’écart du code de l’application. Le script utilise le Server SDK Appwrite, crée les ressources manquantes et laisse intactes celles déjà configurées. Si une collection ou un bucket existe mais ne correspond pas au schéma attendu, il s’arrête avec une erreur plutôt que de le modifier ou supprimer. Consultez le [guide détaillé du provisionnement](./provisioning/README.md) pour créer la clé API et configurer l’outil.
 
 ```sh
 cp provisioning/.env.example provisioning/.env
