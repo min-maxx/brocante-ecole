@@ -355,6 +355,7 @@ button:disabled {
 }
 
 .listing-card-details,
+.listing-card-age-details,
 .listing-condition {
   margin: 0;
   color: #596560;
@@ -362,7 +363,8 @@ button:disabled {
   line-height: 1.5;
 }
 
-.listing-card-details {
+.listing-card-details,
+.listing-card-age-details {
   display: -webkit-box;
   overflow: hidden;
   -webkit-box-orient: vertical;

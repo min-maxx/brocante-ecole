@@ -26,35 +26,32 @@ const CATEGORY_DETAILS = {
   "Vêtements": {
     icon: "👕",
     hint: "Hauts, pantalons, manteaux, chaussures…",
-    titleLabel: "Nom du vêtement",
     titlePlaceholder: "Ex. Veste de pluie",
+    subcategories: ["Anorak", "Baskets", "Manteau", "Blouson", "Doudoune", "Imperméable", "Ciré", "Gilet", "Pull", "Sweat à capuche", "Sweat", "T-shirt manches courtes", "T-shirt manches longues", "Débardeur", "Chemise", "Blouse", "Tunique", "Robe", "Jupe", "Pantalon", "Jean", "Legging", "Jogging", "Short", "Bermuda", "Salopette", "Pyjama", "Camisole", "Maillot de corps", "Maillot de bain", "Chaussures", "Bottes de pluie", "Sandales", "Bonnet", "Écharpe", "Gants", "Moufles", "Casquette", "Autre"],
     photoCaptions: ["Devant · principale", "Étiquette taille/marque", "Détail / défaut"],
     photoGuidance: ["Le vêtement de devant", "L’étiquette de taille et de marque", "Les détails ou éventuels défauts"],
   },
   "Livres": {
     icon: "📚",
     hint: "Albums, romans, BD et manga, manuels…",
-    titleLabel: "Titre du livre",
     titlePlaceholder: "Ex. Les albums de Claude Ponti",
-    subcategories: ["Albums", "Romans jeunesse", "BD et Manga", "Documentaires", "Manuels scolaires", "Revues et magazines", "Autre"],
+    subcategories: ["Album illustré", "Bande dessinée", "Manga", "Roman jeunesse", "Livre interactif", "Documentaire jeunesse", "Livre sonore", "Livre d’énigmes", "Dictionnaire enfant", "Encyclopédie jeunesse", "Recueil de contes", "Livre de comptines", "Livre de coloriage", "Livre d’activités", "Imagier", "Autre"],
     photoCaptions: ["Couverture · principale", "Quatrième / ISBN", "Pages / défaut"],
     photoGuidance: ["La couverture", "La quatrième de couverture et l’ISBN", "Les pages ou défauts utiles à voir"],
   },
   "Jeux et jouets": {
     icon: "🧸",
     hint: "Dinette, puzzles, jeux de société…",
-    titleLabel: "Nom du jeu ou du jouet",
     titlePlaceholder: "Ex. Circuit de train en bois",
-    subcategories: ["Dinette", "Peluches", "Jeux de construction", "Jeux de société", "Jeux de cartes", "Jeux de rôle", "Jouets en bois", "Loisirs créatifs", "Poupées / figurines", "Puzzle", "Trains / voitures", "Sport/Plein air", "Musique", "Autre"],
+    subcategories: ["Jeu de société", "Jeu de cartes", "Puzzle", "Briques de construction", "Jeu de construction", "Figurine", "Poupée", "Peluche", "Voiture miniature", "Circuit de voitures", "Dînette", "Cuisine pour enfant", "Jeu d’imitation", "Déguisement", "Jeu éducatif", "Jeu électronique", "Coffret créatif", "Loisir créatif", "Instrument de musique", "Trottinette", "Vélo enfant", "Draisienne", "Jeu de plein air", "Ballon", "Autre"],
     photoCaptions: ["Vue d’ensemble · principale", "Contenu complet", "Règle / accessoires"],
     photoGuidance: ["La boîte ou la vue d’ensemble", "Le contenu complet étalé", "La règle, les accessoires et les pièces manquantes"],
   },
   "Matériel scolaire": {
     icon: "🎒",
     hint: "Cartables, fournitures, papeterie…",
-    titleLabel: "Nom de l’article",
     titlePlaceholder: "Ex. Cartable bleu",
-    subcategories: ["Cartables", "Fournitures", "Papeterie", "Matériel spécialisé", "Autre"],
+    subcategories: ["Cartable", "Sac à dos scolaire", "Trousse", "Agenda scolaire", "Cahier de texte", "Cahier", "Protège-cahier", "Classeur", "Pochette de rangement", "Stylo", "Crayon de couleur", "Feutre", "Peinture", "Palette de peinture", "Règle", "Équerre", "Rapporteur", "Compas", "Ciseaux scolaires", "Crayon à papier", "Critérium", "Gomme", "Taille-crayon", "Ardoise effaçable", "Tablier de peinture", "Autre"],
     photoCaptions: ["Vue d’ensemble · principale", "Étiquette / marque", "Contenu / défaut"],
     photoGuidance: ["La vue d’ensemble", "L’étiquette ou la marque si utile", "Le contenu, les accessoires ou défauts"],
   },
@@ -136,7 +133,8 @@ function titleCase(value) {
 
 function descriptionRequired({ category, condition, color, subcategory, language }) {
   return condition === "Autre"
-    || (category === "Vêtements" ? color === "Autre" : subcategory === "Autre")
+    || subcategory === "Autre"
+    || (category === "Vêtements" && color === "Autre")
     || (category === "Livres" && language === "Autre");
 }
 
@@ -228,21 +226,23 @@ export function createMarketplace({
 
   function listingDetails(listing) {
     const ages = Array.isArray(listing.ageGroups) ? listing.ageGroups : [];
-    const details = [ageLabel(ages)];
+    const categoryDetails = [listing.subcategory];
+    const ageDetails = [ageLabel(ages)];
     if (listing.category === "Vêtements") {
       const sizes = Array.isArray(listing.sizes) && listing.sizes.length
         ? listing.sizes
         : sizesForAges(ages);
-      details.push(...sizes, listing.color, listing.brand);
+      categoryDetails.push(listing.brand, listing.color);
+      ageDetails.push(...sizes);
     } else {
-      details.push(listing.subcategory);
-      if (listing.category === "Livres") details.push(listing.author, listing.language);
-      else {
-        if (listing.category === "Matériel scolaire") details.push(...schoolLevelsForAges(ages));
-        details.push(listing.brand);
-      }
+      if (listing.category === "Livres") categoryDetails.push(listing.author, listing.language);
+      else categoryDetails.push(listing.brand);
+      if (listing.category === "Matériel scolaire") ageDetails.push(...schoolLevelsForAges(ages));
     }
-    return details.filter(Boolean);
+    return {
+      category: categoryDetails.filter(Boolean),
+      ages: ageDetails.filter(Boolean),
+    };
   }
 
   function listingCardMarkup(listing) {
@@ -257,7 +257,8 @@ export function createMarketplace({
       <div class="listing-card-content">
         <p class="listing-price">${escapeHtml(priceLabel(listing.price))}</p>
         <h2>${escapeHtml(listing.title)}</h2>
-        <p class="listing-card-details">${details.map(escapeHtml).join(" · ")}</p>
+        <p class="listing-card-details">${details.category.map(escapeHtml).join(" · ")}</p>
+        <p class="listing-card-age-details">${details.ages.map(escapeHtml).join(" · ")}</p>
         <p class="listing-condition">${escapeHtml(listing.condition)}</p>
       </div>
     </article>`;
@@ -330,51 +331,53 @@ export function createMarketplace({
       ? "Les âges sélectionnés déterminent automatiquement les indications correspondantes."
       : "Choisissez un ou plusieurs âges concernés par cet objet.";
     const derivedLabel = derivedAgeDetails(draft.category, draft.ageGroups);
-    const subcategoryMarkup = category.subcategories
-      ? `<div class="form-field">
-          <label for="draft-subcategory">${draft.category === "Livres" ? "Genre" : "Type/Genre"}</label>
-          <select id="draft-subcategory" name="subcategory" required><option value="">Choisir ${draft.category === "Livres" ? "un genre" : "un type/genre"}</option>${category.subcategories.map((subcategory) => `<option value="${escapeHtml(subcategory)}"${draft.subcategory === subcategory ? " selected" : ""}>${escapeHtml(subcategory)}</option>`).join("")}</select>
-          <span class="field-hint subcategory-other-hint"${draft.subcategory === "Autre" ? "" : " hidden"}>Précisez dans la description.</span>
-        </div>`
-      : `<div class="form-field">
-          <label for="draft-color">Couleur</label>
-          <select id="draft-color" name="color" required><option value="">Choisir une couleur</option>${COLORS.map((color) => `<option value="${escapeHtml(color)}"${draft.color === color ? " selected" : ""}>${escapeHtml(color)}</option>`).join("")}</select>
-          <span class="field-hint color-other-hint"${draft.color === "Autre" ? "" : " hidden"}>Précisez la couleur dans la description.</span>
-        </div>`;
-    const extraFields = draft.category === "Livres"
-      ? `<div class="form-field">
-          <label for="draft-author">Auteur ou autrice <span class="optional">(facultatif)</span></label>
-          ${suggestedInputMarkup("author", "Auteur ou autrice", "Ex. Claude Ponti")}
-        </div>
-        <div class="form-field">
-          <label for="draft-language">Langue</label>
-          <select id="draft-language" name="language"><option value="">Choisir une langue (facultatif)</option>${LANGUAGES.map((language) => `<option value="${escapeHtml(language)}"${draft.language === language ? " selected" : ""}>${escapeHtml(language)}</option>`).join("")}</select>
-          <span class="field-hint language-other-hint"${draft.language === "Autre" ? "" : " hidden"}>Précisez la langue dans la description.</span>
-        </div>`
-      : `<div class="form-field">
-          <label for="draft-brand">Marque <span class="optional">(facultative)</span></label>
-          ${suggestedInputMarkup("brand", "Marque", draft.category === "Jeux et jouets" ? "Ex. Playmobil" : draft.category === "Matériel scolaire" ? "Ex. Eastpak" : "Ex. Okaïdi")}
-        </div>`;
+    const subcategoryMarkup = `<div class="form-field">
+      <label for="draft-subcategory">Genre/Type</label>
+      <select id="draft-subcategory" name="subcategory" required><option value="">Choisir un genre/type</option>${category.subcategories.map((subcategory) => `<option value="${escapeHtml(subcategory)}"${draft.subcategory === subcategory ? " selected" : ""}>${escapeHtml(subcategory)}</option>`).join("")}</select>
+      <span class="field-hint subcategory-other-hint"${draft.subcategory === "Autre" ? "" : " hidden"}>Précisez dans la description.</span>
+    </div>`;
+    const brandField = `<div class="form-field">
+      <label for="draft-brand">Marque <span class="optional">(facultative)</span></label>
+      ${suggestedInputMarkup("brand", "Marque", draft.category === "Jeux et jouets" ? "Ex. Playmobil" : draft.category === "Matériel scolaire" ? "Ex. Eastpak" : "Ex. Okaïdi")}
+    </div>`;
+    const colorField = `<div class="form-field">
+      <label for="draft-color">Couleur</label>
+      <select id="draft-color" name="color" required><option value="">Choisir une couleur</option>${COLORS.map((color) => `<option value="${escapeHtml(color)}"${draft.color === color ? " selected" : ""}>${escapeHtml(color)}</option>`).join("")}</select>
+      <span class="field-hint color-other-hint"${draft.color === "Autre" ? "" : " hidden"}>Précisez la couleur dans la description.</span>
+    </div>`;
+    const extraFields = draft.category === "Vêtements"
+      ? `${brandField}${colorField}`
+      : draft.category === "Livres"
+        ? `<div class="form-field">
+            <label for="draft-author">Auteur <span class="optional">(facultatif)</span></label>
+            ${suggestedInputMarkup("author", "Auteur", "Ex. Claude Ponti")}
+          </div>
+          <div class="form-field">
+            <label for="draft-language">Langue</label>
+            <select id="draft-language" name="language"><option value="">Choisir une langue (facultatif)</option>${LANGUAGES.map((language) => `<option value="${escapeHtml(language)}"${draft.language === language ? " selected" : ""}>${escapeHtml(language)}</option>`).join("")}</select>
+            <span class="field-hint language-other-hint"${draft.language === "Autre" ? "" : " hidden"}>Précisez la langue dans la description.</span>
+          </div>`
+        : brandField;
     return `<section class="wizard-panel" aria-labelledby="object-heading">
       <p class="fixed-category">Catégorie choisie : ${escapeHtml(draft.category)}</p>
       <h2 id="object-heading">Décrivez l’objet</h2>
       <p>Renseignez les précisions utiles aux autres familles.</p>
       <form id="object-form" novalidate>
         <div class="object-form-grid">
+          ${subcategoryMarkup}
+          <label class="form-field">État
+            <select name="condition" required><option value="">Choisir l’état</option>${CONDITIONS.map((condition) => `<option value="${escapeHtml(condition)}"${draft.condition === condition ? " selected" : ""}>${escapeHtml(condition)}</option>`).join("")}</select>
+            <span class="field-hint condition-other-hint"${draft.condition === "Autre" ? "" : " hidden"}>Précisez l’état de l’objet dans la description.</span>
+          </label>
           <fieldset class="age-picker">
             <legend>Âges concernés (3 à 11 ans) <span aria-hidden="true">*</span></legend>
             <div class="age-options">${ageChoices.map((age) => `<label class="age-option"><input type="checkbox" name="ageGroup" value="${age}"${draft.ageGroups.includes(age) ? " checked" : ""}><span>${age} ans</span></label>`).join("")}</div>
             <p class="field-hint">${ageHint}</p>
             ${derivedLabel ? `<p class="derived-value" id="derived-sizes" aria-live="polite">${escapeHtml(derivedLabel)}</p>` : ""}
           </fieldset>
-          <label class="form-field">${category.titleLabel}
+          <label class="form-field">Titre
             <input name="title" value="${escapeHtml(draft.title)}" maxlength="70" placeholder="${escapeHtml(category.titlePlaceholder)}" required>
           </label>
-          <label class="form-field">État de l’objet
-            <select name="condition" required><option value="">Choisir l’état</option>${CONDITIONS.map((condition) => `<option value="${escapeHtml(condition)}"${draft.condition === condition ? " selected" : ""}>${escapeHtml(condition)}</option>`).join("")}</select>
-            <span class="field-hint condition-other-hint"${draft.condition === "Autre" ? "" : " hidden"}>Précisez l’état de l’objet dans la description.</span>
-          </label>
-          ${subcategoryMarkup}
           ${extraFields}
           <label class="form-field">Prix (€)
             <input name="price" type="number" min="0" step="1" value="${escapeHtml(draft.price)}" placeholder="0 pour donner" required>
@@ -391,7 +394,7 @@ export function createMarketplace({
 
   function previewDetailValues() {
     if (draft.category === "Vêtements") {
-      return [draft.color, draft.brand].filter(Boolean);
+      return [draft.subcategory, draft.brand, draft.color].filter(Boolean);
     }
     if (draft.category === "Livres") {
       return [draft.subcategory, draft.author, draft.language].filter(Boolean);
@@ -482,13 +485,12 @@ export function createMarketplace({
       agePicker.querySelector('input[name="ageGroup"]').focus();
       return false;
     }
-    if (draft.category === "Vêtements") {
-      if (!COLORS.includes(draft.color)) {
-        setMessage("Choisissez une couleur dans la liste.", "error");
-        return false;
-      }
-    } else if (!CATEGORY_DETAILS[draft.category]?.subcategories?.includes(draft.subcategory)) {
+    if (!CATEGORY_DETAILS[draft.category]?.subcategories?.includes(draft.subcategory)) {
       setMessage("Choisissez un type ou un genre dans la liste.", "error");
+      return false;
+    }
+    if (draft.category === "Vêtements" && !COLORS.includes(draft.color)) {
+      setMessage("Choisissez une couleur dans la liste.", "error");
       return false;
     }
     return true;

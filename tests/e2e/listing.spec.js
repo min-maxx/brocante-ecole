@@ -14,6 +14,7 @@ function existingListing() {
     category: "Vêtements",
     condition: "Bon",
     ageGroups: [5],
+    subcategory: "Pull",
     sizes: ["105 à 110 cm"],
     color: "Rouge",
     brand: "Kiabi",
@@ -108,6 +109,22 @@ async function startListing(page, category) {
   }
   await page.getByRole("button", { name: "Continuer" }).click();
   await expect(page.getByRole("heading", { name: "Décrivez l’objet" })).toBeVisible();
+  await expectFormFieldOrder(page, category);
+}
+
+async function expectFormFieldOrder(page, category) {
+  const expectedFields = {
+    "Vêtements": ["subcategory", "condition", "ageGroup", "title", "brand", "color", "price", "description"],
+    Livres: ["subcategory", "condition", "ageGroup", "title", "author", "language", "price", "description"],
+    "Jeux et jouets": ["subcategory", "condition", "ageGroup", "title", "brand", "price", "description"],
+    "Matériel scolaire": ["subcategory", "condition", "ageGroup", "title", "brand", "price", "description"],
+  };
+  const actualFields = await page.locator("#object-form .object-form-grid > *").evaluateAll((fields) =>
+    fields.map((field) => field.matches(".age-picker")
+      ? "ageGroup"
+      : field.querySelector("select, input, textarea")?.getAttribute("name")),
+  );
+  expect(actualFields).toEqual(expectedFields[category]);
 }
 
 test("a family publishes a clothing listing and sees it in the uniform listing grid", async ({ page }) => {
@@ -179,7 +196,7 @@ test("a family publishes a clothing listing and sees it in the uniform listing g
 
   await page.getByRole("button", { name: "Déposer une annonce" }).click();
   await expect(page.getByRole("heading", { name: "Choisissez une catégorie" })).toBeVisible();
-  await expect(page.getByLabel("Nom du vêtement")).toHaveCount(0);
+  await expect(page.getByLabel("Titre")).toHaveCount(0);
   await page.getByRole("button", { name: "Vêtements" }).click();
   await page.getByRole("button", { name: "Continuer" }).click();
 
@@ -212,8 +229,14 @@ test("a family publishes a clothing listing and sees it in the uniform listing g
   await page.getByRole("button", { name: "Continuer" }).click();
 
   await expect(page.getByRole("heading", { name: "Décrivez l’objet" })).toBeVisible();
-  await page.getByLabel("Nom du vêtement").fill("Veste de pluie");
-  await page.getByLabel("État de l’objet").selectOption("Très bon");
+  await expectFormFieldOrder(page, "Vêtements");
+  const clothingTypes = page.locator('select[name="subcategory"]');
+  await expect(clothingTypes.locator('option[value="Anorak"]')).toHaveCount(1);
+  await expect(clothingTypes.locator('option[value="T-shirt manches courtes"]')).toHaveCount(1);
+  await expect(clothingTypes.locator('option[value="Autre"]')).toHaveCount(1);
+  await clothingTypes.selectOption("Imperméable");
+  await page.getByLabel("Titre").fill("Veste de pluie");
+  await page.getByLabel("État").selectOption("Très bon");
   await page.getByLabel("Couleur").selectOption("Autre");
   await expect(page.getByText("Précisez la couleur dans la description.")).toBeVisible();
   await page.getByRole("textbox", { name: "Marque" }).fill("kia");
@@ -239,11 +262,16 @@ test("a family publishes a clothing listing and sees it in the uniform listing g
   await expect(page.getByRole("heading", { name: "Les annonces du marché" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Veste de pluie" })).toBeVisible();
   await expect(page.locator(".listing-card")).toHaveCount(2);
-  await expect(page.locator(".listing-card").filter({ hasText: "Veste de pluie" })).toContainText("Don");
+  const clothingCard = page.locator(".listing-card").filter({ hasText: "Veste de pluie" });
+  await expect(clothingCard).toContainText("Don");
+  await expect(clothingCard.locator(".listing-card-details")).toContainText("Imperméable · Kiabi · Autre");
+  await expect(clothingCard.locator(".listing-card-age-details")).toContainText("5 et 6 ans");
+  await expect(clothingCard.locator(".listing-condition")).toHaveText("Très bon");
   await expect.poll(() => uploadedPhotos).toBe(3);
   expect(published).toHaveLength(1);
   expect(published[0].ageGroups).toEqual([5, 6]);
   expect(published[0].sizes).toEqual(["105 à 110 cm", "111 à 116 cm"]);
+  expect(published[0].subcategory).toBe("Imperméable");
   expect(published[0].brand).toBe("Kiabi");
   await expect.poll(async () => {
     const heights = await page.locator(".listing-card").evaluateAll((cards) =>
@@ -270,11 +298,17 @@ test("a family publishes a listing in the Livres category with age, genre, autho
   const { published } = await installMarketplaceApi(page, bookListings);
 
   await startListing(page, "Livres");
-  await page.getByLabel("Titre du livre").fill("Le petit album");
-  await page.getByLabel("État de l’objet").selectOption("Bon");
-  await page.getByLabel("Genre").selectOption("Autre");
+  const bookTypes = page.locator('select[name="subcategory"]');
+  await expect(bookTypes.locator('option:not([value=""])')).toHaveCount(16);
+  await expect(bookTypes.locator('option[value="Bande dessinée"]')).toHaveCount(1);
+  await expect(bookTypes.locator('option[value="Manga"]')).toHaveCount(1);
+  await expect(bookTypes.locator('option[value="Livre d’activités"]')).toHaveCount(1);
+  await expect(bookTypes.locator('option[value="Autre"]')).toHaveCount(1);
+  await bookTypes.selectOption("Autre");
+  await page.getByLabel("Titre").fill("Le petit album");
+  await page.getByLabel("État").selectOption("Bon");
   await expect(page.getByText("Précisez dans la description.")).toBeVisible();
-  await page.getByRole("textbox", { name: "Auteur ou autrice" }).fill("claude");
+  await page.getByRole("textbox", { name: "Auteur" }).fill("claude");
   await expect(page.getByRole("option", { name: "Claude Ponti" })).toBeVisible();
   await page.getByRole("option", { name: "Claude Ponti" }).click();
   const language = page.getByLabel("Langue");
@@ -307,6 +341,9 @@ test("a family publishes a listing in the Livres category with age, genre, autho
 
   await expect(page.getByRole("button", { name: "Déposer une annonce" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Le petit album" })).toBeVisible();
+  const bookCard = page.locator(".listing-card").filter({ hasText: "Le petit album" });
+  await expect(bookCard.locator(".listing-card-details")).toContainText("Autre · Claude Ponti · Autre");
+  await expect(bookCard.locator(".listing-card-age-details")).toContainText("5 ans");
   expect(published).toHaveLength(1);
   expect(published[0]).toMatchObject({
     category: "Livres",
@@ -335,12 +372,14 @@ test("a family publishes a listing in the Jeux et jouets category with age, type
   const { published } = await installMarketplaceApi(page, games);
 
   await startListing(page, "Jeux et jouets");
-  await page.getByLabel("Nom du jeu ou du jouet").fill("Circuit de train");
-  await page.getByLabel("État de l’objet").selectOption("Très bon");
+  await page.getByLabel("Titre").fill("Circuit de train");
+  await page.getByLabel("État").selectOption("Très bon");
   const genre = page.locator('select[name="subcategory"]');
-  await expect(genre.locator('option:not([value=""])')).toHaveCount(14);
-  await genre.selectOption("Sport/Plein air");
-  await expect(genre.locator('option[value="Sport/Plein air"]')).toHaveCount(1);
+  await expect(genre.locator('option:not([value=""])')).toHaveCount(25);
+  await expect(genre.locator('option[value="Jeu de plein air"]')).toHaveCount(1);
+  await expect(genre.locator('option[value="Vélo enfant"]')).toHaveCount(1);
+  await genre.selectOption("Jeu de plein air");
+  await expect(genre.locator('option[value="Jeu de plein air"]')).toHaveCount(1);
   await expect(genre.locator('option[value="Autre"]')).toHaveCount(1);
 
   const brand = page.getByRole("textbox", { name: "Marque" });
@@ -356,7 +395,7 @@ test("a family publishes a listing in the Jeux et jouets category with age, type
 
   await page.getByLabel("6 ans").check();
   await page.getByRole("button", { name: "Voir l’aperçu" }).click();
-  await expect(page.locator(".preview-card")).toContainText("Sport/Plein air");
+  await expect(page.locator(".preview-card")).toContainText("Jeu de plein air");
   await expect(page.locator(".preview-card")).toContainText("Nouvelle Marque");
   await page.getByRole("button", { name: "Publier" }).click();
   await expect(page.getByRole("button", { name: "Déposer une annonce" })).toBeVisible();
@@ -364,22 +403,28 @@ test("a family publishes a listing in the Jeux et jouets category with age, type
   expect(published).toHaveLength(1);
   expect(published[0]).toMatchObject({
     category: "Jeux et jouets",
-    subcategory: "Sport/Plein air",
+    subcategory: "Jeu de plein air",
     ageGroups: [6],
     sizes: [],
     color: "",
     brand: "Nouvelle Marque",
   });
+  const gameCard = page.locator(".listing-card").filter({ hasText: "Circuit de train" });
+  await expect(gameCard.locator(".listing-card-details")).toContainText("Jeu de plein air · Nouvelle Marque");
+  await expect(gameCard.locator(".listing-card-age-details")).toContainText("6 ans");
 });
 
 test("a family publishes a listing in the Matériel scolaire category with classes derived from age", async ({ page }) => {
   const { published } = await installMarketplaceApi(page);
 
   await startListing(page, "Matériel scolaire");
-  await page.getByLabel("Nom de l’article").fill("Cartable bleu");
-  await page.getByLabel("État de l’objet").selectOption("Autre");
+  const schoolTypes = page.locator('select[name="subcategory"]');
+  await expect(schoolTypes.locator('option:not([value=""])')).toHaveCount(26);
+  await expect(schoolTypes.locator('option[value="Crayon de couleur"]')).toHaveCount(1);
+  await schoolTypes.selectOption("Cartable");
+  await page.getByLabel("Titre").fill("Cartable bleu");
+  await page.getByLabel("État").selectOption("Autre");
   await expect(page.getByText("Précisez l’état de l’objet dans la description.")).toBeVisible();
-  await page.locator('select[name="subcategory"]').selectOption("Cartables");
   await page.getByRole("textbox", { name: "Marque" }).fill("Tann’s");
   await page.getByLabel("Prix (€)").fill("5");
   await page.locator('textarea[name="description"]').fill("Fermeture éclair à vérifier.");
@@ -398,7 +443,7 @@ test("a family publishes a listing in the Matériel scolaire category with class
   expect(published).toHaveLength(1);
   expect(published[0]).toMatchObject({
     category: "Matériel scolaire",
-    subcategory: "Cartables",
+    subcategory: "Cartable",
     condition: "Autre",
     ageGroups: [6, 7],
     sizes: [],
@@ -406,6 +451,9 @@ test("a family publishes a listing in the Matériel scolaire category with class
     brand: "Tann’S",
   });
   expect(published[0]).not.toHaveProperty("schoolLevel");
+  const schoolCard = page.locator(".listing-card").filter({ hasText: "Cartable bleu" });
+  await expect(schoolCard.locator(".listing-card-details")).toContainText("Cartable · Tann’S");
+  await expect(schoolCard.locator(".listing-card-age-details")).toContainText("6 et 7 ans · CP · CE1");
 });
 
 test("a family can retry loading listings after a temporary Appwrite error", async ({ page }) => {

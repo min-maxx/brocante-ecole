@@ -146,7 +146,7 @@ Le script crée la base si elle n’existe pas, puis la collection `listings` av
 | `author` | Chaîne, 70 caractères | Non |
 | `language` | Chaîne, 40 caractères | Non |
 
-Le formulaire envoie toujours `description` et `brand`. Si leur valeur est facultative et omise, il envoie une chaîne vide afin que les attributs requis soient présents. `subcategory` stocke le genre ou le type pour les livres, jeux et jouets et matériel scolaire ; les classes du matériel scolaire sont calculées à partir des âges et ne sont pas saisies ni enregistrées séparément.
+Le formulaire envoie toujours `description` et `brand`. Si leur valeur est facultative et omise, il envoie une chaîne vide afin que les attributs requis soient présents. `subcategory` stocke le genre ou le type pour toutes les catégories. Les classes du matériel scolaire sont calculées à partir des âges et ne sont pas saisies ni enregistrées séparément. Les cartes d’annonces affichent le prix, le titre, le genre/type, les caractéristiques de la catégorie, les âges avec leurs équivalences disponibles et l’état.
 
 Pour les livres, la langue se choisit parmi Français, Anglais, Espagnol, Allemand, Italien, Bilingue et Autre. Le choix « Autre » requiert une précision dans la description.
 
