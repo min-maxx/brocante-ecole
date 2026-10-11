@@ -106,7 +106,7 @@ Le hostname de `APPWRITE_SIGNUP_CALLBACK_URL` (par exemple `brocante-esmj.appwri
 <a id="configuration-annonces-photos"></a>
 ## 🗂️ Provisionner les annonces et les photos
 
-Les ressources du marché se créent depuis le répertoire isolé [`provisioning/`](./provisioning/), à l’écart du code de l’application. Le script utilise le Server SDK Appwrite, crée les ressources manquantes et laisse intactes celles déjà configurées. Si une collection ou un bucket existe mais ne correspond pas au schéma attendu, il s’arrête avec une erreur plutôt que de le modifier ou supprimer. Consultez le [guide détaillé du provisionnement](./provisioning/README.md) pour créer la clé API et configurer l’outil.
+Les ressources du marché se créent depuis le répertoire isolé [`provisioning/`](./provisioning/), à l’écart du code de l’application. Le script utilise le Server SDK Appwrite, crée les ressources manquantes et ajoute les attributs facultatifs de catégorie manquants aux collections `listings` existantes. Si une ressource existante a un schéma incompatible ou des permissions incorrectes, il s’arrête avec une erreur plutôt que de la modifier ou supprimer. Consultez le [guide détaillé du provisionnement](./provisioning/README.md) pour créer la clé API et configurer l’outil.
 
 ```sh
 cp provisioning/.env.example provisioning/.env
@@ -142,8 +142,11 @@ Le script crée la base si elle n’existe pas, puis la collection `listings` av
 | `brand` | Chaîne, 70 caractères | Oui |
 | `price` | Entier | Oui |
 | `photoIds` | Tableau de chaînes | Oui |
+| `subcategory` | Chaîne, 30 caractères | Non |
+| `author` | Chaîne, 70 caractères | Non |
+| `language` | Chaîne, 40 caractères | Non |
 
-Le formulaire envoie toujours `description` et `brand`. Si leur valeur est facultative et omise, il envoie une chaîne vide afin que les attributs requis soient présents.
+Le formulaire envoie toujours `description` et `brand`. Si leur valeur est facultative et omise, il envoie une chaîne vide afin que les attributs requis soient présents. `subcategory` stocke le genre ou le type pour les livres, jeux et jouets et matériel scolaire ; les classes du matériel scolaire sont calculées à partir des âges et ne sont pas saisies ni enregistrées séparément.
 
 Les champs des annonces et les photos sont accessibles aux familles connectées qui consultent le marché.
 

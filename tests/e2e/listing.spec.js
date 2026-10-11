@@ -16,10 +16,98 @@ function existingListing() {
     ageGroups: [5],
     sizes: ["105 à 110 cm"],
     color: "Rouge",
-    brand: "",
+    brand: "Kiabi",
     price: 4,
     photoIds: ["existing-photo"],
   };
+}
+
+async function installMarketplaceApi(page, initialListings = []) {
+  const listings = [...initialListings];
+  const published = [];
+  let uploadedPhotos = 0;
+
+  await page.route("**/v1/**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const path = url.pathname;
+
+    if (path.endsWith("/account") && request.method() === "GET") {
+      await route.fulfill({ json: { $id: "family-1", name: "Famille Test", email: "famille@example.test" } });
+      return;
+    }
+
+    if (path.includes("/storage/buckets/") && path.endsWith("/files") && request.method() === "POST") {
+      uploadedPhotos += 1;
+      await route.fulfill({
+        status: 201,
+        json: {
+          $id: `photo-${uploadedPhotos}`,
+          $createdAt: "2026-10-10T10:00:00.000Z",
+          $permissions: [],
+          bucketId: "e2e-listing-photos",
+          name: `photo-${uploadedPhotos}.png`,
+          signature: "test-signature",
+          mimeType: "image/png",
+          sizeOriginal: photoBytes.length,
+        },
+      });
+      return;
+    }
+
+    if (path.includes("/storage/buckets/") && path.endsWith("/view")) {
+      await route.fulfill({ contentType: "image/png", body: photoBytes });
+      return;
+    }
+
+    if (path.includes("/databases/") && path.endsWith("/documents") && request.method() === "GET") {
+      await route.fulfill({ json: { total: listings.length, documents: listings } });
+      return;
+    }
+
+    if (path.includes("/databases/") && path.endsWith("/documents") && request.method() === "POST") {
+      const { data } = request.postDataJSON();
+      const listing = {
+        ...data,
+        $id: `listing-${listings.length + 1}`,
+        $createdAt: "2026-10-10T10:00:00.000Z",
+      };
+      published.push(listing);
+      listings.unshift(listing);
+      await route.fulfill({ status: 201, json: listing });
+      return;
+    }
+
+    await route.fulfill({
+      status: 404,
+      json: { code: 404, type: "not_found", message: `Unexpected Appwrite request: ${request.method()} ${path}` },
+    });
+  });
+
+  return { listings, published };
+}
+
+async function startListing(page, category) {
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Les annonces du marché" })).toBeVisible();
+  await page.getByRole("button", { name: "Déposer une annonce" }).click();
+  await page.getByRole("button", { name: category }).click();
+  await page.getByRole("button", { name: "Continuer" }).click();
+  await page.locator("#draft-photo").setInputFiles({
+    name: "annonce.png",
+    mimeType: "image/png",
+    buffer: photoBytes,
+  });
+  const mainPhotoCaption = {
+    Livres: "Couverture",
+    "Jeux et jouets": "Vue d’ensemble",
+    "Matériel scolaire": "Vue d’ensemble",
+  }[category];
+  if (mainPhotoCaption) {
+    await expect(page.locator(".photo-thumb").first()).toContainText(mainPhotoCaption);
+  }
+  await page.getByRole("button", { name: "Continuer" }).click();
+  await expect(page.getByRole("heading", { name: "Décrivez l’objet" })).toBeVisible();
 }
 
 test("a family publishes a clothing listing and sees it in the uniform listing grid", async ({ page }) => {
@@ -128,6 +216,9 @@ test("a family publishes a clothing listing and sees it in the uniform listing g
   await page.getByLabel("État de l’objet").selectOption("Très bon");
   await page.getByLabel("Couleur").selectOption("Autre");
   await expect(page.getByText("Précisez la couleur dans la description.")).toBeVisible();
+  await page.getByRole("textbox", { name: "Marque" }).fill("kia");
+  await expect(page.locator("#suggestions-brand [role=option]", { hasText: "Kiabi" })).toBeVisible();
+  await page.locator("#suggestions-brand [role=option]", { hasText: "Kiabi" }).click();
   await page.getByLabel("Description").fill("Vert sauge, doublure amovible.");
   await page.getByLabel("Prix (€)").fill("0");
   await page.getByRole("button", { name: "Voir l’aperçu" }).click();
@@ -153,12 +244,153 @@ test("a family publishes a clothing listing and sees it in the uniform listing g
   expect(published).toHaveLength(1);
   expect(published[0].ageGroups).toEqual([5, 6]);
   expect(published[0].sizes).toEqual(["105 à 110 cm", "111 à 116 cm"]);
+  expect(published[0].brand).toBe("Kiabi");
   await expect.poll(async () => {
     const heights = await page.locator(".listing-card").evaluateAll((cards) =>
       cards.map((card) => Math.round(card.getBoundingClientRect().height)),
     );
     return new Set(heights).size;
   }).toBe(1);
+});
+
+test("a family publishes a book with age, genre, author and language", async ({ page }) => {
+  const bookListings = [{
+    ...existingListing(),
+    $id: "existing-book",
+    title: "Albums de Claude Ponti",
+    category: "Livres",
+    ageGroups: [5, 6],
+    sizes: [],
+    color: "",
+    brand: "",
+    subcategory: "Albums",
+    author: "Claude Ponti",
+    language: "Français",
+  }];
+  const { published } = await installMarketplaceApi(page, bookListings);
+
+  await startListing(page, "Livres");
+  await page.getByLabel("Titre du livre").fill("Le petit album");
+  await page.getByLabel("État de l’objet").selectOption("Bon");
+  await page.getByLabel("Genre").selectOption("Autre");
+  await expect(page.getByText("Précisez dans la description.")).toBeVisible();
+  await page.getByRole("textbox", { name: "Auteur ou autrice" }).fill("claude");
+  await expect(page.getByRole("option", { name: "Claude Ponti" })).toBeVisible();
+  await page.getByRole("option", { name: "Claude Ponti" }).click();
+  await page.getByRole("textbox", { name: "Langue" }).fill("fr");
+  await expect(page.getByRole("option", { name: "Français" })).toBeVisible();
+  await page.getByRole("option", { name: "Français" }).click();
+  await page.getByLabel("Prix (€)").fill("0");
+  await page.locator('textarea[name="description"]').fill("Album illustré.");
+  await page.getByRole("button", { name: "Voir l’aperçu" }).click();
+  await expect(page.getByRole("alert")).toContainText("Sélectionnez au moins un âge");
+
+  await page.getByLabel("5 ans").check();
+  await page.getByRole("button", { name: "Voir l’aperçu" }).click();
+  await expect(page.getByRole("heading", { name: "Vérifiez votre annonce" })).toBeVisible();
+  await expect(page.locator(".preview-card")).toContainText("Claude Ponti");
+  await expect(page.locator(".preview-card")).toContainText("Français");
+  await expect(page.locator(".preview-card")).not.toContainText("CM1");
+  await page.getByRole("button", { name: "Publier" }).click();
+
+  await expect(page.getByRole("button", { name: "Déposer une annonce" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Le petit album" })).toBeVisible();
+  expect(published).toHaveLength(1);
+  expect(published[0]).toMatchObject({
+    category: "Livres",
+    subcategory: "Autre",
+    ageGroups: [5],
+    sizes: [],
+    color: "",
+    brand: "",
+    author: "Claude Ponti",
+    language: "Français",
+  });
+});
+
+test("a family publishes a game with age, type and a reusable brand suggestion", async ({ page }) => {
+  const games = ["Janod", "JANOD"].map((brand, index) => ({
+    ...existingListing(),
+    $id: `existing-game-${index}`,
+    title: "Jeu existant",
+    category: "Jeux et jouets",
+    ageGroups: [5, 6],
+    sizes: [],
+    color: "",
+    brand,
+    subcategory: "Jeux de construction",
+  }));
+  const { published } = await installMarketplaceApi(page, games);
+
+  await startListing(page, "Jeux et jouets");
+  await page.getByLabel("Nom du jeu ou du jouet").fill("Circuit de train");
+  await page.getByLabel("État de l’objet").selectOption("Très bon");
+  const genre = page.locator('select[name="subcategory"]');
+  await expect(genre.locator('option:not([value=""])')).toHaveCount(14);
+  await genre.selectOption("Sport/Plein air");
+  await expect(genre.locator('option[value="Sport/Plein air"]')).toHaveCount(1);
+  await expect(genre.locator('option[value="Autre"]')).toHaveCount(1);
+
+  const brand = page.getByRole("textbox", { name: "Marque" });
+  await brand.fill("jan");
+  await expect(page.locator("#suggestions-brand [role=option]", { hasText: "Janod" })).toHaveCount(1);
+  await expect(page.locator("#suggestions-brand [role=option]")).toHaveCount(1);
+  await page.locator("#suggestions-brand [role=option]", { hasText: "Janod" }).click();
+  await brand.fill("nOuVeLLe marque");
+  await page.getByLabel("Prix (€)").fill("12");
+  await expect(brand).toHaveValue("Nouvelle Marque");
+  await page.getByRole("button", { name: "Voir l’aperçu" }).click();
+  await expect(page.getByRole("alert")).toContainText("Sélectionnez au moins un âge");
+
+  await page.getByLabel("6 ans").check();
+  await page.getByRole("button", { name: "Voir l’aperçu" }).click();
+  await expect(page.locator(".preview-card")).toContainText("Sport/Plein air");
+  await expect(page.locator(".preview-card")).toContainText("Nouvelle Marque");
+  await page.getByRole("button", { name: "Publier" }).click();
+  await expect(page.getByRole("button", { name: "Déposer une annonce" })).toBeVisible();
+
+  expect(published).toHaveLength(1);
+  expect(published[0]).toMatchObject({
+    category: "Jeux et jouets",
+    subcategory: "Sport/Plein air",
+    ageGroups: [6],
+    sizes: [],
+    color: "",
+    brand: "Nouvelle Marque",
+  });
+});
+
+test("a family publishes school supplies with classes derived from age and no class input", async ({ page }) => {
+  const { published } = await installMarketplaceApi(page);
+
+  await startListing(page, "Matériel scolaire");
+  await page.getByLabel("Nom de l’article").fill("Cartable bleu");
+  await page.getByLabel("État de l’objet").selectOption("Bon");
+  await page.locator('select[name="subcategory"]').selectOption("Cartables");
+  await page.getByRole("textbox", { name: "Marque" }).fill("Tann’s");
+  await page.getByLabel("Prix (€)").fill("5");
+  await expect(page.getByLabel(/classe/i)).toHaveCount(0);
+  await page.getByRole("button", { name: "Voir l’aperçu" }).click();
+  await expect(page.getByRole("alert")).toContainText("Sélectionnez au moins un âge");
+
+  await page.getByLabel("6 ans").check();
+  await page.getByLabel("7 ans").check();
+  await expect(page.locator("#derived-sizes")).toContainText("CP / CE1");
+  await page.getByRole("button", { name: "Voir l’aperçu" }).click();
+  await expect(page.locator(".preview-card")).toContainText("CP / CE1");
+  await page.getByRole("button", { name: "Publier" }).click();
+  await expect(page.getByRole("button", { name: "Déposer une annonce" })).toBeVisible();
+
+  expect(published).toHaveLength(1);
+  expect(published[0]).toMatchObject({
+    category: "Matériel scolaire",
+    subcategory: "Cartables",
+    ageGroups: [6, 7],
+    sizes: [],
+    color: "",
+    brand: "Tann’S",
+  });
+  expect(published[0]).not.toHaveProperty("schoolLevel");
 });
 
 test("a family can retry loading listings after a temporary Appwrite error", async ({ page }) => {

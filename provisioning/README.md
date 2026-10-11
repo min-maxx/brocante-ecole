@@ -6,7 +6,7 @@ Ce répertoire crée et vérifie les ressources dont le marché a besoin :
 - la collection `listings` avec ses attributs et permissions ;
 - le bucket Storage `listing-photos` avec ses permissions.
 
-Le script ne crée pas la table privée des adresses autorisées ni la fonction d’inscription. Il n’importe aucune donnée familiale. Les ressources existantes sont laissées intactes ; si une collection ou un bucket existant n’a pas le schéma ou les permissions attendus, le script s’arrête au lieu de les modifier ou de les supprimer.
+Le script ne crée pas la table privée des adresses autorisées ni la fonction d’inscription. Il n’importe aucune donnée familiale. Les ressources existantes sont conservées ; le script ajoute uniquement les attributs facultatifs `subcategory`, `author` et `language` s’ils manquent dans une collection `listings` déjà créée. Si un attribut existant a un schéma incompatible, ou si les permissions attendues manquent, le script s’arrête sans modifier ni supprimer la ressource.
 
 ## Prérequis
 
@@ -71,7 +71,7 @@ npm install --prefix provisioning
 npm run setup --prefix provisioning
 ```
 
-Le script crée la base si nécessaire, puis la collection et le bucket. Il peut être relancé : il vérifie les ressources existantes et ne recrée pas celles qui sont déjà conformes. Il échoue explicitement si une collection ou un bucket existe avec un schéma ou des permissions incompatibles ; corrigez alors la configuration Appwrite et relancez-le.
+Le script crée la base si nécessaire, puis la collection et le bucket. Il peut être relancé : il vérifie les ressources existantes, ajoute les attributs facultatifs de catégorie qui manquent dans une collection existante, et ne recrée pas les ressources déjà conformes. Il échoue explicitement si une collection ou un bucket existe avec un schéma ou des permissions incompatibles ; corrigez alors la configuration Appwrite et relancez-le.
 
 La création de la base, de la collection et du bucket n’est pas une transaction. Si une étape échoue après la création d’une ressource, le script indique l’erreur ; corrigez le problème puis relancez-le pour terminer le provisionnement.
 

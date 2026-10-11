@@ -11,10 +11,14 @@ export const LISTING_ATTRIBUTES = [
   { key: "brand", type: "string", size: 70, required: true },
   { key: "price", type: "integer", required: true },
   { key: "photoIds", type: "string", size: 36, required: true, array: true },
+  { key: "subcategory", type: "string", size: 30, required: false },
+  { key: "author", type: "string", size: 70, required: false },
+  { key: "language", type: "string", size: 40, required: false },
 ];
 
 const COLLECTION_PERMISSIONS = ['read("users")', 'create("users")'];
 const BUCKET_PERMISSIONS = ['read("users")', 'create("users")'];
+const OPTIONAL_LISTING_ATTRIBUTES = new Set(["subcategory", "author", "language"]);
 
 function isNotFound(error) {
   return error?.code === 404;
@@ -30,7 +34,7 @@ function verifyPermissions(actual, expected, resource) {
   }
 }
 
-function verifyCollection(collection) {
+async function verifyCollection(collection, { databases, databaseId, collectionId, log }) {
   if (collection.documentSecurity !== true) {
     throw new Error(
       "La collection existante n’active pas la sécurité des documents. Aucune modification automatique n’a été appliquée.",
@@ -42,6 +46,17 @@ function verifyCollection(collection) {
   for (const expected of LISTING_ATTRIBUTES) {
     const actual = existingAttributes.get(expected.key);
     if (!actual) {
+      if (OPTIONAL_LISTING_ATTRIBUTES.has(expected.key)) {
+        await databases.createStringAttribute({
+          databaseId,
+          collectionId,
+          key: expected.key,
+          size: expected.size,
+          required: false,
+        });
+        log(`Attribut facultatif ajouté : ${expected.key}`);
+        continue;
+      }
       throw new Error(
         `L’attribut requis « ${expected.key} » manque dans la collection existante. ` +
         "Aucune modification automatique n’a été appliquée.",
@@ -78,7 +93,7 @@ async function ensureResource({ get, create, verify, description, log }) {
   }
 
   if (existing) {
-    verify?.(existing);
+    await verify?.(existing);
     log(`Déjà configuré : ${description}`);
     return;
   }
@@ -113,7 +128,7 @@ export async function provisionMarketplace({ databases, storage, config, log = c
       attributes: LISTING_ATTRIBUTES,
       indexes: [],
     }),
-    verify: verifyCollection,
+    verify: (collection) => verifyCollection(collection, { databases, databaseId, collectionId, log }),
     description: `collection ${collectionId}`,
     log,
   });
