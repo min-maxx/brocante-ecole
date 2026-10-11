@@ -174,6 +174,7 @@ npm run dev
 | --- | --- |
 | `npm test` | Tests d’inscription, de la liste d’adresses autorisées et du schéma de provisionnement |
 | `npm run test:e2e` | Parcours navigateur complet des annonces, avec Appwrite simulé |
+| `npm run test:e2e:config` | Affichage de la configuration manquante et masquage du bouton de nouvel essai inutile |
 | `npm run build` | Compilation de production |
 
 Le test navigateur nécessite une installation initiale de Chromium :
@@ -181,6 +182,8 @@ Le test navigateur nécessite une installation initiale de Chromium :
 ```sh
 npx playwright install chromium
 ```
+
+La GitHub Actions **CI** exécute ces tests ainsi que le build sur chaque pull request et chaque push sur `main`. Les appels Appwrite des tests e2e sont simulés : aucun secret Appwrite n’est requis dans les secrets GitHub.
 
 ### Vérifications avant l’ouverture aux familles
 

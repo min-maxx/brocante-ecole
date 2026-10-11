@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Tests, e2e et build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            provisioning/package-lock.json
+
+      - name: Install application dependencies
+        run: npm ci
+
+      - name: Install provisioning dependencies
+        run: npm ci --prefix provisioning
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Build production bundle
+        run: npm run build
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run marketplace end-to-end test
+        run: npm run test:e2e
+
+      - name: Run missing-configuration end-to-end test
+        run: npm run test:e2e:config
