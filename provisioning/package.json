@@ -1,0 +1,12 @@
+{
+  "name": "brocante-ecole-provisioning",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "setup": "node --env-file=.env src/setup.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "node-appwrite": "^29.1.0"
+  }
+}

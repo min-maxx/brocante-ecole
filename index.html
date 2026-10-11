@@ -11,8 +11,18 @@
       <a class="back-link" href="/" aria-label="Retour à l’accueil">← Le petit marché</a>
       <section class="signup-card" aria-labelledby="signup-title">
         <p class="eyebrow">Le marché des familles de l’école</p>
-        <h1 id="signup-title">Créer votre compte</h1>
+        <h1 id="signup-title">Accéder au marché</h1>
         <p class="intro">Inscrivez-vous avec l’adresse communiquée à l’APEL pour rejoindre le marché.</p>
+        <form id="login-form">
+          <label for="login-email">Adresse e-mail</label>
+          <input id="login-email" name="email" type="email" autocomplete="email" maxlength="254" required />
+          <label for="login-password">Mot de passe</label>
+          <input id="login-password" name="password" type="password" autocomplete="current-password" required />
+          <button id="login-submit" type="submit">Se connecter</button>
+        </form>
+
+        <details id="signup-details" class="signup-details">
+          <summary>Créer un compte personnel</summary>
         <form id="email-form" novalidate>
           <label for="email">Adresse e-mail autorisée</label>
           <input id="email" name="email" type="email" autocomplete="email" maxlength="254" required />
@@ -35,10 +45,12 @@
 
           <button id="password-submit" type="submit">Finaliser la création du compte</button>
         </form>
+        </details>
         <p id="form-message" class="message" role="status" aria-live="polite"></p>
         <p class="eligibility-note">Votre adresse n’est pas autorisée ? Contactez l’APEL pour vérifier votre inscription.</p>
       </section>
     </main>
+    <div id="market-root" hidden></div>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>
