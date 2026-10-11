@@ -277,11 +277,14 @@ test("a family publishes a listing in the Livres category with age, genre, autho
   await page.getByRole("textbox", { name: "Auteur ou autrice" }).fill("claude");
   await expect(page.getByRole("option", { name: "Claude Ponti" })).toBeVisible();
   await page.getByRole("option", { name: "Claude Ponti" }).click();
-  const language = page.getByRole("textbox", { name: "Langue" });
-  await expect(language).toHaveAttribute("maxlength", "40");
-  await language.fill("fr");
-  await expect(page.getByRole("option", { name: "Français" })).toBeVisible();
-  await page.getByRole("option", { name: "Français" }).click();
+  const language = page.getByLabel("Langue");
+  await expect(language.locator("option")).toHaveCount(8);
+  await expect(language.locator('option[value="Français"]')).toHaveCount(1);
+  await expect(language.locator('option[value="Anglais"]')).toHaveCount(1);
+  await expect(language.locator('option[value="Autre"]')).toHaveCount(1);
+  await language.selectOption("Autre");
+  await expect(page.getByText("Précisez la langue dans la description.")).toBeVisible();
+  await expect(page.locator('textarea[name="description"]')).toHaveAttribute("required", "");
   await page.getByLabel("Prix (€)").fill("0");
   await page.locator('textarea[name="description"]').fill("Album illustré.");
   await page.getByRole("button", { name: "Voir l’aperçu" }).click();
@@ -289,9 +292,16 @@ test("a family publishes a listing in the Livres category with age, genre, autho
 
   await page.getByLabel("5 ans").check();
   await page.getByRole("button", { name: "Voir l’aperçu" }).click();
+  await page.getByRole("button", { name: "Modifier" }).click();
+  await page.locator('textarea[name="description"]').fill("");
+  await page.getByRole("button", { name: "Voir l’aperçu" }).click();
+  await expect(page.getByRole("heading", { name: "Décrivez l’objet" })).toBeVisible();
+  await expect(page.locator('textarea[name="description"]')).toHaveAttribute("required", "");
+  await page.locator('textarea[name="description"]').fill("Album illustré en langue régionale.");
+  await page.getByRole("button", { name: "Voir l’aperçu" }).click();
   await expect(page.getByRole("heading", { name: "Vérifiez votre annonce" })).toBeVisible();
   await expect(page.locator(".preview-card")).toContainText("Claude Ponti");
-  await expect(page.locator(".preview-card")).toContainText("Français");
+  await expect(page.locator(".preview-card")).toContainText("Autre");
   await expect(page.locator(".preview-card")).not.toContainText("CM1");
   await page.getByRole("button", { name: "Publier" }).click();
 
@@ -306,7 +316,7 @@ test("a family publishes a listing in the Livres category with age, genre, autho
     color: "",
     brand: "",
     author: "Claude Ponti",
-    language: "Français",
+    language: "Autre",
   });
 });
 

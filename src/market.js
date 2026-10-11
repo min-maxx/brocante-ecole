@@ -15,12 +15,12 @@ const COLORS = [
   "Blanc", "Noir", "Gris", "Beige", "Marron", "Rouge", "Rose",
   "Orange", "Jaune", "Vert", "Bleu", "Violet", "Multicolore", "Autre",
 ];
+const LANGUAGES = ["Français", "Anglais", "Espagnol", "Allemand", "Italien", "Bilingue", "Autre"];
 const CONDITIONS = ["Neuf", "Très bon", "Bon", "Satisfaisant", "À réparer", "Autre"];
 const MAX_PHOTOS = 3;
 const SUGGESTION_MAX_LENGTH = {
   brand: 70,
   author: 70,
-  language: 40,
 };
 const CATEGORY_DETAILS = {
   "Vêtements": {
@@ -134,8 +134,18 @@ function titleCase(value) {
   );
 }
 
-function descriptionRequired({ category, condition, color, subcategory }) {
-  return condition === "Autre" || (category === "Vêtements" ? color === "Autre" : subcategory === "Autre");
+function descriptionRequired({ category, condition, color, subcategory, language }) {
+  return condition === "Autre"
+    || (category === "Vêtements" ? color === "Autre" : subcategory === "Autre")
+    || (category === "Livres" && language === "Autre");
+}
+
+function descriptionPlaceholder(draft) {
+  if (draft.condition === "Autre") return "Précisez l’état de l’objet et décrivez-le…";
+  if (draft.category === "Vêtements" && draft.color === "Autre") return "Précisez la couleur et décrivez le vêtement…";
+  if (draft.category === "Livres" && draft.language === "Autre") return "Précisez la langue du livre et décrivez-le…";
+  if (draft.subcategory === "Autre") return "Précisez la catégorie « Autre » et décrivez l’objet…";
+  return "Détails utiles, contenu du lot, petites marques d’usage…";
 }
 
 function getListingPhotoUrl(storage, bucketId, fileId) {
@@ -324,12 +334,12 @@ export function createMarketplace({
       ? `<div class="form-field">
           <label for="draft-subcategory">${draft.category === "Livres" ? "Genre" : "Type/Genre"}</label>
           <select id="draft-subcategory" name="subcategory" required><option value="">Choisir ${draft.category === "Livres" ? "un genre" : "un type/genre"}</option>${category.subcategories.map((subcategory) => `<option value="${escapeHtml(subcategory)}"${draft.subcategory === subcategory ? " selected" : ""}>${escapeHtml(subcategory)}</option>`).join("")}</select>
-          <span class="field-hint other-hint"${draft.subcategory === "Autre" ? "" : " hidden"}>Précisez dans la description.</span>
+          <span class="field-hint subcategory-other-hint"${draft.subcategory === "Autre" ? "" : " hidden"}>Précisez dans la description.</span>
         </div>`
       : `<div class="form-field">
           <label for="draft-color">Couleur</label>
           <select id="draft-color" name="color" required><option value="">Choisir une couleur</option>${COLORS.map((color) => `<option value="${escapeHtml(color)}"${draft.color === color ? " selected" : ""}>${escapeHtml(color)}</option>`).join("")}</select>
-          <span class="field-hint other-hint"${draft.color === "Autre" ? "" : " hidden"}>Précisez la couleur dans la description.</span>
+          <span class="field-hint color-other-hint"${draft.color === "Autre" ? "" : " hidden"}>Précisez la couleur dans la description.</span>
         </div>`;
     const extraFields = draft.category === "Livres"
       ? `<div class="form-field">
@@ -337,8 +347,9 @@ export function createMarketplace({
           ${suggestedInputMarkup("author", "Auteur ou autrice", "Ex. Claude Ponti")}
         </div>
         <div class="form-field">
-          <label for="draft-language">Langue <span class="optional">(facultative)</span></label>
-          ${suggestedInputMarkup("language", "Langue", "Ex. Français")}
+          <label for="draft-language">Langue</label>
+          <select id="draft-language" name="language"><option value="">Choisir une langue (facultatif)</option>${LANGUAGES.map((language) => `<option value="${escapeHtml(language)}"${draft.language === language ? " selected" : ""}>${escapeHtml(language)}</option>`).join("")}</select>
+          <span class="field-hint language-other-hint"${draft.language === "Autre" ? "" : " hidden"}>Précisez la langue dans la description.</span>
         </div>`
       : `<div class="form-field">
           <label for="draft-brand">Marque <span class="optional">(facultative)</span></label>
@@ -370,7 +381,7 @@ export function createMarketplace({
             <span class="field-hint price-hint">${Number(draft.price || 0) === 0 ? "0 € sera affiché comme un don." : "Prix affiché aux autres familles."}</span>
           </label>
           <label class="form-field full">Description <span class="optional description-optionality">${needsDetail ? "(à préciser)" : "(facultative)"}</span>
-            <textarea name="description" maxlength="500"${needsDetail ? " required" : ""} placeholder="${draft.condition === "Autre" ? "Précisez l’état de l’objet et décrivez-le…" : draft.category === "Vêtements" && draft.color === "Autre" ? "Précisez la couleur et décrivez le vêtement…" : needsDetail ? "Précisez la catégorie « Autre » et décrivez l’objet…" : "Détails utiles, contenu du lot, petites marques d’usage…"}">${escapeHtml(draft.description)}</textarea>
+            <textarea name="description" maxlength="500"${needsDetail ? " required" : ""} placeholder="${escapeHtml(descriptionPlaceholder(draft))}">${escapeHtml(draft.description)}</textarea>
           </label>
         </div>
       </form>
@@ -694,23 +705,20 @@ export function createMarketplace({
       }
       toggle?.setAttribute("aria-expanded", "true");
     }
-    if (target.name === "color" || target.name === "subcategory" || target.name === "condition") {
-      const isOther = target.value === "Autre";
+    if (target.name === "color" || target.name === "subcategory" || target.name === "condition" || target.name === "language") {
       const description = root.querySelector('textarea[name="description"]');
-      const hint = root.querySelector(".other-hint");
       const conditionHint = root.querySelector(".condition-other-hint");
       const optionality = root.querySelector(".description-optionality");
       if (description) {
         description.required = descriptionRequired(draft);
-        description.placeholder = draft.condition === "Autre"
-          ? "Précisez l’état de l’objet et décrivez-le…"
-          : draft.category === "Vêtements" && draft.color === "Autre"
-            ? "Précisez la couleur et décrivez le vêtement…"
-            : draft.subcategory === "Autre"
-              ? "Précisez la catégorie « Autre » et décrivez l’objet…"
-              : "Détails utiles, contenu du lot, petites marques d’usage…";
+        description.placeholder = descriptionPlaceholder(draft);
       }
-      if (hint && target.name !== "condition") hint.hidden = !isOther;
+      const colorHint = root.querySelector(".color-other-hint");
+      const subcategoryHint = root.querySelector(".subcategory-other-hint");
+      const languageHint = root.querySelector(".language-other-hint");
+      if (colorHint) colorHint.hidden = draft.color !== "Autre";
+      if (subcategoryHint) subcategoryHint.hidden = draft.subcategory !== "Autre";
+      if (languageHint) languageHint.hidden = draft.language !== "Autre";
       if (conditionHint) conditionHint.hidden = draft.condition !== "Autre";
       if (optionality) optionality.textContent = description.required ? "(à préciser)" : "(facultative)";
     }
@@ -744,7 +752,7 @@ export function createMarketplace({
     }
     if (target instanceof HTMLSelectElement) {
       draft[target.name] = target.value;
-      if (target.name === "color" || target.name === "subcategory" || target.name === "condition") render();
+      if (target.name === "color" || target.name === "subcategory" || target.name === "condition" || target.name === "language") render();
     }
     if (target.id === "draft-photo") {
       addPhotos(target.files || []);
