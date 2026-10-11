@@ -205,7 +205,7 @@ La GitHub Actions **CI** exécute ces tests ainsi que le build sur chaque pull r
 | **Compte personnel** | Compte individuel associé à une adresse autorisée, utilisé par une personne et non partagé avec les autres membres du foyer. Un changement d’adresse crée un nouveau compte. |
 | **Annonce** | Proposition d’un objet à prix affiché ou donné. Une annonce peut être disponible, en pause, réservée, vendue ou retirée. |
 | **Catégorie d’annonce** | Classe l’objet parmi les vêtements, livres, jeux et jouets ou le matériel scolaire. |
-| **État de l’objet** | Description normalisée choisie parmi Neuf, Très bon, Bon, Satisfaisant ou À réparer. |
+| **État de l’objet** | Description normalisée choisie parmi Neuf, Très bon, Bon, Satisfaisant, À réparer ou Autre ; avec Autre, la famille précise l’état dans la description. |
 | **Conversation privée** | Échange entre deux familles pour poser des questions ou organiser la remise d’un objet. Elle ne constitue pas une demande d’achat et ne change pas la disponibilité de l’annonce. |
 | **Demande d’achat** | Demande par laquelle une famille indique vouloir acheter l’objet au prix affiché. Le vendeur doit l’accepter pour réserver l’annonce. |
 | **Offre de prix** | Proposition d’un acheteur inférieure au prix affiché. Le vendeur peut l’accepter, la refuser ou proposer un contre-montant. |

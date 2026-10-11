@@ -219,7 +219,7 @@ test("a family publishes a clothing listing and sees it in the uniform listing g
   await page.getByRole("textbox", { name: "Marque" }).fill("kia");
   await expect(page.locator("#suggestions-brand [role=option]", { hasText: "Kiabi" })).toBeVisible();
   await page.locator("#suggestions-brand [role=option]", { hasText: "Kiabi" }).click();
-  await page.getByLabel("Description").fill("Vert sauge, doublure amovible.");
+  await page.locator('textarea[name="description"]').fill("Vert sauge, doublure amovible.");
   await page.getByLabel("Prix (€)").fill("0");
   await page.getByRole("button", { name: "Voir l’aperçu" }).click();
   await expect(page.getByRole("alert")).toContainText("Sélectionnez au moins un âge");
@@ -367,10 +367,12 @@ test("a family publishes a listing in the Matériel scolaire category with class
 
   await startListing(page, "Matériel scolaire");
   await page.getByLabel("Nom de l’article").fill("Cartable bleu");
-  await page.getByLabel("État de l’objet").selectOption("Bon");
+  await page.getByLabel("État de l’objet").selectOption("Autre");
+  await expect(page.getByText("Précisez l’état de l’objet dans la description.")).toBeVisible();
   await page.locator('select[name="subcategory"]').selectOption("Cartables");
   await page.getByRole("textbox", { name: "Marque" }).fill("Tann’s");
   await page.getByLabel("Prix (€)").fill("5");
+  await page.locator('textarea[name="description"]').fill("Fermeture éclair à vérifier.");
   await expect(page.getByLabel(/classe/i)).toHaveCount(0);
   await page.getByRole("button", { name: "Voir l’aperçu" }).click();
   await expect(page.getByRole("alert")).toContainText("Sélectionnez au moins un âge");
@@ -387,6 +389,7 @@ test("a family publishes a listing in the Matériel scolaire category with class
   expect(published[0]).toMatchObject({
     category: "Matériel scolaire",
     subcategory: "Cartables",
+    condition: "Autre",
     ageGroups: [6, 7],
     sizes: [],
     color: "",
