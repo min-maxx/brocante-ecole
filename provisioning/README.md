@@ -75,6 +75,8 @@ Le script crée la base si nécessaire, puis la collection et le bucket. Il peut
 
 La création de la base, de la collection et du bucket n’est pas une transaction. Si une étape échoue après la création d’une ressource, le script indique l’erreur ; corrigez le problème puis relancez-le pour terminer le provisionnement.
 
+Le provisionnement **ne modifie pas** le fichier `.env.local` de l’application. Après le setup, reportez les identifiants publics vers les variables `VITE_APPWRITE_DATABASE_ID`, `VITE_APPWRITE_LISTINGS_COLLECTION_ID` et `VITE_APPWRITE_LISTING_PHOTOS_BUCKET_ID` dans le `.env.local` à la racine du dépôt. Redémarrez `npm run dev` pour que Vite recharge ces valeurs. Ne copiez jamais `APPWRITE_API_KEY` dans ce fichier.
+
 ## Tester sans accès Appwrite
 
 Les tests utilisent des services Appwrite simulés et ne créent aucune ressource distante :

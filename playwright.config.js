@@ -4,6 +4,7 @@ const baseURL = "http://127.0.0.1:4179";
 
 export default defineConfig({
   testDir: "./tests/e2e",
+  testMatch: "listing.spec.js",
   use: {
     baseURL,
     browserName: "chromium",

@@ -276,6 +276,10 @@ button:disabled {
   color: #a12d2d;
 }
 
+.market-message[data-kind="configuration"] {
+  color: #a12d2d;
+}
+
 .text-button {
   margin-left: 8px;
   padding: 0;

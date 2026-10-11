@@ -75,6 +75,7 @@ export function createMarketplace({
   databaseId,
   collectionId,
   photosBucketId,
+  missingConfiguration = [],
   onLogout,
 }) {
   let user = null;
@@ -87,7 +88,8 @@ export function createMarketplace({
   let loading = false;
   let publishing = false;
 
-  const configReady = Boolean(databases && storage && databaseId && collectionId && photosBucketId);
+  const configReady = missingConfiguration.length === 0
+    && Boolean(databases && storage && databaseId && collectionId && photosBucketId);
 
   function setMessage(text, kind = "info") {
     message = text;
@@ -140,7 +142,7 @@ export function createMarketplace({
         <div><p class="eyebrow">Le marché des familles de l’école</p><h1>Les annonces du marché</h1></div>
         <button class="button-primary" type="button" data-action="new-listing">Déposer une annonce</button>
       </div>
-      ${message ? `<p class="market-message" data-kind="${escapeHtml(messageKind)}" role="${messageKind === "error" ? "alert" : "status"}">${escapeHtml(message)}${messageKind === "error" && !loading ? `<button class="text-button" type="button" data-action="retry-list">Réessayer</button>` : ""}</p>` : ""}
+      ${message ? `<p class="market-message" data-kind="${escapeHtml(messageKind)}" role="${["error", "configuration"].includes(messageKind) ? "alert" : "status"}">${escapeHtml(message)}${messageKind === "error" && !loading ? `<button class="text-button" type="button" data-action="retry-list">Réessayer</button>` : ""}</p>` : ""}
       ${content}
     </main>`;
   }
@@ -319,7 +321,15 @@ export function createMarketplace({
   async function loadListings() {
     if (!configReady) {
       loading = false;
-      setMessage("Le marché n’est pas configuré. Les identifiants Appwrite des annonces et des photos sont nécessaires.", "error");
+      const missing = missingConfiguration.length
+        ? missingConfiguration.map((name) => `« ${name} »`).join(", ")
+        : "les identifiants de la base, de la collection et du bucket";
+      setMessage(
+        `Configuration du marché incomplète : renseignez ${missing} dans le fichier .env.local à la racine. ` +
+        "Reprenez les identifiants correspondants dans provisioning/.env, sans copier la clé API. " +
+        "Redémarrez le serveur Vite après la modification.",
+        "configuration",
+      );
       return;
     }
     loading = true;

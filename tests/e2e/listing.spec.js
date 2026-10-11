@@ -160,3 +160,41 @@ test("a family publishes a clothing listing and sees it in the uniform listing g
     return new Set(heights).size;
   }).toBe(1);
 });
+
+test("a family can retry loading listings after a temporary Appwrite error", async ({ page }) => {
+  let listAttempts = 0;
+  await page.route("**/v1/**", async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+
+    if (path.endsWith("/account") && request.method() === "GET") {
+      await route.fulfill({ json: { $id: "family-1", name: "Famille Test" } });
+      return;
+    }
+
+    if (path.includes("/databases/") && path.endsWith("/documents") && request.method() === "GET") {
+      listAttempts += 1;
+      if (listAttempts === 1) {
+        await route.fulfill({
+          status: 500,
+          json: { code: 500, type: "general_unknown", message: "Temporary Appwrite error" },
+        });
+      } else {
+        await route.fulfill({ json: { total: 0, documents: [] } });
+      }
+      return;
+    }
+
+    await route.fulfill({
+      status: 404,
+      json: { code: 404, type: "not_found", message: `Unexpected Appwrite request: ${request.method()} ${path}` },
+    });
+  });
+
+  await page.goto("/");
+  await expect(page.getByRole("alert")).toContainText("Impossible de charger les annonces");
+  await page.getByRole("button", { name: "Réessayer" }).click();
+  await expect(page.getByRole("heading", { name: "Aucune annonce pour le moment" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Réessayer" })).toHaveCount(0);
+  expect(listAttempts).toBe(2);
+});
