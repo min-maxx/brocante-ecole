@@ -106,7 +106,7 @@ Le hostname de `APPWRITE_SIGNUP_CALLBACK_URL` (par exemple `brocante-esmj.appwri
 <a id="configuration-annonces-photos"></a>
 ## 🗂️ Provisionner les annonces et les photos
 
-Les ressources du marché se créent depuis le répertoire isolé [`provisioning/`](./provisioning/), à l’écart du code de l’application. Le script utilise le Server SDK Appwrite, crée les ressources manquantes et laisse intactes celles déjà configurées. Si une collection ou un bucket existe mais ne correspond pas au schéma attendu, il s’arrête avec une erreur plutôt que de le modifier ou supprimer. Consultez le [guide détaillé du provisionnement](./provisioning/README.md) pour créer la clé API et configurer l’outil.
+Les ressources du marché se créent depuis le répertoire isolé [`provisioning/`](./provisioning/), à l’écart du code de l’application. Le script utilise le Server SDK Appwrite, crée les ressources manquantes et ajoute les attributs facultatifs de catégorie manquants aux collections `listings` existantes. Si une ressource existante a un schéma incompatible ou des permissions incorrectes, il s’arrête avec une erreur plutôt que de la modifier ou supprimer. Consultez le [guide détaillé du provisionnement](./provisioning/README.md) pour créer la clé API et configurer l’outil.
 
 ```sh
 cp provisioning/.env.example provisioning/.env
@@ -142,8 +142,14 @@ Le script crée la base si elle n’existe pas, puis la collection `listings` av
 | `brand` | Chaîne, 70 caractères | Oui |
 | `price` | Entier | Oui |
 | `photoIds` | Tableau de chaînes | Oui |
+| `subcategory` | Chaîne, 30 caractères | Non |
+| `shoeSize` | Entier | Non |
+| `author` | Chaîne, 70 caractères | Non |
+| `language` | Chaîne, 40 caractères | Non |
 
-Le formulaire envoie toujours `description` et `brand`. Si leur valeur est facultative et omise, il envoie une chaîne vide afin que les attributs requis soient présents.
+Le formulaire envoie toujours `description` et `brand`. Si leur valeur est facultative et omise, il envoie une chaîne vide afin que les attributs requis soient présents. `subcategory` stocke le genre ou le type pour toutes les catégories; les listes sont regroupées par famille et triées alphabétiquement à l’intérieur de chaque groupe, avec « Autre » en dernier. Pour les types de chaussures, les âges sélectionnés limitent les pointures proposées; la pointure choisie est obligatoire et enregistrée dans `shoeSize`. Les autres vêtements conservent les équivalences de taille en centimètres. Les plages contiguës sont regroupées pour une lecture plus rapide dans les annonces. Les classes du matériel scolaire sont calculées à partir des âges et ne sont pas saisies ni enregistrées séparément.
+
+Pour les livres, la langue se choisit parmi Français, Anglais, Espagnol, Allemand, Italien, Bilingue et Autre. Le choix « Autre » requiert une précision dans la description.
 
 Les champs des annonces et les photos sont accessibles aux familles connectées qui consultent le marché.
 
@@ -202,7 +208,7 @@ La GitHub Actions **CI** exécute ces tests ainsi que le build sur chaque pull r
 | **Compte personnel** | Compte individuel associé à une adresse autorisée, utilisé par une personne et non partagé avec les autres membres du foyer. Un changement d’adresse crée un nouveau compte. |
 | **Annonce** | Proposition d’un objet à prix affiché ou donné. Une annonce peut être disponible, en pause, réservée, vendue ou retirée. |
 | **Catégorie d’annonce** | Classe l’objet parmi les vêtements, livres, jeux et jouets ou le matériel scolaire. |
-| **État de l’objet** | Description normalisée choisie parmi Neuf, Très bon, Bon, Satisfaisant ou À réparer. |
+| **État de l’objet** | Description normalisée choisie parmi Neuf, Très bon état, Bon état, Satisfaisant, À réparer ou Autre ; avec Autre, la famille précise l’état dans la description. |
 | **Conversation privée** | Échange entre deux familles pour poser des questions ou organiser la remise d’un objet. Elle ne constitue pas une demande d’achat et ne change pas la disponibilité de l’annonce. |
 | **Demande d’achat** | Demande par laquelle une famille indique vouloir acheter l’objet au prix affiché. Le vendeur doit l’accepter pour réserver l’annonce. |
 | **Offre de prix** | Proposition d’un acheteur inférieure au prix affiché. Le vendeur peut l’accepter, la refuser ou proposer un contre-montant. |

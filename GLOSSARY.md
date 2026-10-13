@@ -20,7 +20,7 @@ Proposition d’un objet à prix affiché ou donné. Une annonce peut être disp
 Classe l’objet selon l’une des catégories du marché : vêtements, livres, jeux et jouets ou matériel scolaire.
 
 **État de l’objet** :
-Description normalisée de l’état d’un objet, choisie parmi Neuf, Très bon, Bon, Satisfaisant ou À réparer.
+Description normalisée de l’état d’un objet, choisie parmi Neuf, Très bon, Bon, Satisfaisant, À réparer ou Autre. Si Autre est choisi, la famille précise l’état dans la description.
 
 **Conversation privée** :
 Échange entre deux familles pour poser des questions ou organiser la remise d’un objet. Elle ne constitue pas une demande d’achat et ne change pas la disponibilité de l’annonce.
