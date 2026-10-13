@@ -12,13 +12,14 @@ export const LISTING_ATTRIBUTES = [
   { key: "price", type: "integer", required: true },
   { key: "photoIds", type: "string", size: 36, required: true, array: true },
   { key: "subcategory", type: "string", size: 30, required: false },
+  { key: "shoeSize", type: "integer", required: false },
   { key: "author", type: "string", size: 70, required: false },
   { key: "language", type: "string", size: 40, required: false },
 ];
 
 const COLLECTION_PERMISSIONS = ['read("users")', 'create("users")'];
 const BUCKET_PERMISSIONS = ['read("users")', 'create("users")'];
-const OPTIONAL_LISTING_ATTRIBUTES = new Set(["subcategory", "author", "language"]);
+const OPTIONAL_LISTING_ATTRIBUTES = new Set(["subcategory", "shoeSize", "author", "language"]);
 
 function isNotFound(error) {
   return error?.code === 404;
@@ -47,13 +48,24 @@ async function verifyCollection(collection, { databases, databaseId, collectionI
     const actual = existingAttributes.get(expected.key);
     if (!actual) {
       if (OPTIONAL_LISTING_ATTRIBUTES.has(expected.key)) {
-        await databases.createStringAttribute({
-          databaseId,
-          collectionId,
-          key: expected.key,
-          size: expected.size,
-          required: false,
-        });
+        if (expected.type === "string") {
+          await databases.createStringAttribute({
+            databaseId,
+            collectionId,
+            key: expected.key,
+            size: expected.size,
+            required: false,
+          });
+        } else if (expected.type === "integer") {
+          await databases.createIntegerAttribute({
+            databaseId,
+            collectionId,
+            key: expected.key,
+            required: false,
+          });
+        } else {
+          throw new Error(`Le type « ${expected.type} » de l’attribut facultatif « ${expected.key} » n’est pas pris en charge.`);
+        }
         log(`Attribut facultatif ajouté : ${expected.key}`);
         continue;
       }

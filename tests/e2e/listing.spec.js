@@ -119,13 +119,79 @@ async function expectFormFieldOrder(page, category) {
     "Jeux et jouets": ["subcategory", "condition", "ageGroup", "title", "brand", "price", "description"],
     "Matériel scolaire": ["subcategory", "condition", "ageGroup", "title", "brand", "price", "description"],
   };
-  const actualFields = await page.locator("#object-form .object-form-grid > *").evaluateAll((fields) =>
+  expect(await objectFormFieldNames(page)).toEqual(expectedFields[category]);
+}
+
+async function objectFormFieldNames(page) {
+  return page.locator("#object-form .object-form-grid > *").evaluateAll((fields) =>
     fields.map((field) => field.matches(".age-picker")
       ? "ageGroup"
       : field.querySelector("select, input, textarea")?.getAttribute("name")),
   );
-  expect(actualFields).toEqual(expectedFields[category]);
 }
+
+async function expectSubcategoryGroups(select, expectedLabels) {
+  const groups = await select.evaluate((element) => {
+    const collator = new Intl.Collator("fr", { sensitivity: "base" });
+    const optionGroups = [...element.querySelectorAll("optgroup")];
+    return {
+      labels: optionGroups.map((group) => group.label),
+      sorted: optionGroups.every((group) => {
+        const values = [...group.querySelectorAll("option")].map((option) => option.value);
+        return values.every((value, index) => index === 0 || collator.compare(values[index - 1], value) <= 0);
+      }),
+      otherIsLast: element.options[element.options.length - 1].value === "Autre",
+    };
+  });
+  expect(groups.labels).toEqual(expectedLabels);
+  expect(groups.sorted).toBe(true);
+  expect(groups.otherIsLast).toBe(true);
+}
+
+test("listing cards show category and condition as footer tags", async ({ page }) => {
+  const categories = ["Vêtements", "Livres", "Jeux et jouets", "Matériel scolaire"];
+  const listings = categories.map((category, index) => ({
+    ...existingListing(),
+    $id: `other-${index}`,
+    title: `Objet autre ${index}`,
+    category,
+    subcategory: "Autre",
+  }));
+  listings.push({
+    ...existingListing(),
+    $id: "many-sizes",
+    title: "Manteau avec toutes les tailles",
+    category: "Vêtements",
+    subcategory: "Manteau",
+    ageGroups: [3, 4, 5, 6, 7, 8, 9, 10, 11],
+    sizes: [
+      "36 mois · 93 à 98 cm",
+      "99 à 104 cm",
+      "105 à 110 cm",
+      "111 à 116 cm",
+      "117 à 122 cm",
+      "123 à 128 cm",
+      "129 à 134 cm",
+      "135 à 140 cm",
+      "141 à 152 cm (indicatif)",
+    ],
+  });
+  await installMarketplaceApi(page, listings);
+
+  await page.goto("/");
+  for (const [index, category] of categories.entries()) {
+    const card = page.locator(".listing-card").filter({ hasText: `Objet autre ${index}` });
+    await expect(card.locator(".listing-card-details")).toContainText("Autre");
+    expect(await card.locator(".listing-card-footer .listing-card-tag").allTextContents()).toEqual([category, "Bon état"]);
+    await expect(card.locator(".listing-other-type")).toHaveCount(0);
+  }
+  const manySizesCard = page.locator(".listing-card").filter({ hasText: "Manteau avec toutes les tailles" });
+  await expect(manySizesCard.getByRole("heading", { name: "Manteau avec toutes les tailles" })).toBeVisible();
+  await expect(manySizesCard.locator(".listing-category-tag")).toHaveText("Vêtements");
+  await expect(manySizesCard.locator(".listing-card-details")).toContainText("Manteau");
+  await expect(manySizesCard.locator(".listing-card-age-details")).toContainText("93–152 cm");
+  expect(await manySizesCard.evaluate((card) => card.getBoundingClientRect().height)).toBeGreaterThan(390);
+});
 
 test("a family publishes a clothing listing and sees it in the uniform listing grid", async ({ page }) => {
   const listings = [existingListing()];
@@ -234,9 +300,10 @@ test("a family publishes a clothing listing and sees it in the uniform listing g
   await expect(clothingTypes.locator('option[value="Anorak"]')).toHaveCount(1);
   await expect(clothingTypes.locator('option[value="T-shirt manches courtes"]')).toHaveCount(1);
   await expect(clothingTypes.locator('option[value="Autre"]')).toHaveCount(1);
+  await expectSubcategoryGroups(clothingTypes, ["Manteaux et vestes", "Hauts", "Bas et tenues", "Chaussures", "Accessoires"]);
   await clothingTypes.selectOption("Imperméable");
   await page.getByLabel("Titre").fill("Veste de pluie");
-  await page.getByLabel("État").selectOption("Très bon");
+  await page.getByLabel("État").selectOption({ label: "Très bon état" });
   await page.getByLabel("Couleur").selectOption("Autre");
   await expect(page.getByText("Précisez la couleur dans la description.")).toBeVisible();
   await page.getByRole("textbox", { name: "Marque" }).fill("kia");
@@ -248,14 +315,13 @@ test("a family publishes a clothing listing and sees it in the uniform listing g
   await expect(page.getByRole("alert")).toContainText("Sélectionnez au moins un âge");
   await page.getByLabel("5 ans").check();
   await page.getByLabel("6 ans").check();
-  await expect(page.locator("#derived-sizes")).toContainText("111 à 116 cm");
+  await expect(page.locator("#derived-sizes")).toContainText("105–116 cm");
   await page.getByRole("button", { name: "Voir l’aperçu" }).click();
 
   await expect(page.getByRole("heading", { name: "Vérifiez votre annonce" })).toBeVisible();
   await expect(page.locator(".preview-card")).toContainText("Don");
   await expect(page.locator(".preview-card")).toContainText("5 et 6 ans");
-  await expect(page.locator(".preview-card")).toContainText("105 à 110 cm");
-  await expect(page.locator(".preview-card")).toContainText("111 à 116 cm");
+  await expect(page.locator(".preview-card")).toContainText("105–116 cm");
   await expect(page.locator(".preview-card")).toContainText("Vert sauge, doublure amovible.");
 
   await page.getByRole("button", { name: "Publier" }).click();
@@ -266,19 +332,65 @@ test("a family publishes a clothing listing and sees it in the uniform listing g
   await expect(clothingCard).toContainText("Don");
   await expect(clothingCard.locator(".listing-card-details")).toContainText("Imperméable · Kiabi · Autre");
   await expect(clothingCard.locator(".listing-card-age-details")).toContainText("5 et 6 ans");
-  await expect(clothingCard.locator(".listing-condition")).toHaveText("Très bon");
+  await expect(clothingCard.locator(".listing-condition-tag")).toHaveText("Très bon état");
   await expect.poll(() => uploadedPhotos).toBe(3);
   expect(published).toHaveLength(1);
   expect(published[0].ageGroups).toEqual([5, 6]);
   expect(published[0].sizes).toEqual(["105 à 110 cm", "111 à 116 cm"]);
   expect(published[0].subcategory).toBe("Imperméable");
   expect(published[0].brand).toBe("Kiabi");
+  expect(published[0].condition).toBe("Très bon");
+  expect(published[0]).not.toHaveProperty("shoeSize");
   await expect.poll(async () => {
     const heights = await page.locator(".listing-card").evaluateAll((cards) =>
       cards.map((card) => Math.round(card.getBoundingClientRect().height)),
     );
     return new Set(heights).size;
   }).toBe(1);
+});
+
+test("a family sees age-based EU footwear sizes for shoes", async ({ page }) => {
+  const { published } = await installMarketplaceApi(page);
+
+  await startListing(page, "Vêtements");
+  await page.locator('select[name="subcategory"]').selectOption("Baskets");
+  expect(await objectFormFieldNames(page)).toEqual([
+    "subcategory", "condition", "ageGroup", "title", "brand", "color", "shoeSize", "price", "description",
+  ]);
+  const shoeSize = page.locator('select[name="shoeSize"]');
+  const shoeSizeLabel = page.locator('label[for="draft-shoe-size"]');
+  const shoeSizeHint = page.locator(".shoe-size-hint");
+  await expect(shoeSize).toBeVisible();
+  await expect(shoeSizeLabel).toHaveText("Pointure");
+  await expect(shoeSizeHint).toHaveText("Les pointures proposées dépendent des âges sélectionnés.");
+  await expect(shoeSizeHint).toBeVisible();
+  await expect(shoeSize).toBeDisabled();
+  await page.getByLabel("Titre").fill("Baskets enfant");
+  await page.getByLabel("État").selectOption("Neuf");
+  await page.getByLabel("Couleur").selectOption("Noir");
+  await page.getByLabel("Prix (€)").fill("8");
+  await page.getByLabel("5 ans").check();
+  await expect(shoeSizeHint).toBeVisible();
+  await expect(shoeSize.locator('option:not([value=""])')).toHaveText(["28", "29"]);
+  await page.getByLabel("6 ans").check();
+  await expect(shoeSizeHint).toBeVisible();
+  await expect(page.locator("#derived-sizes")).toHaveText("Pointures correspondantes : 28–31 EU");
+  await expect(shoeSize).toBeEnabled();
+  await expect(shoeSize).toHaveAttribute("required", "");
+  await expect(shoeSize.locator('option:not([value=""])')).toHaveText(["28", "29", "30", "31"]);
+  await page.getByRole("button", { name: "Voir l’aperçu" }).click();
+  await expect(page.getByRole("heading", { name: "Décrivez l’objet" })).toBeVisible();
+  await shoeSize.selectOption("29");
+  await expect(shoeSizeLabel).toHaveText("Pointure");
+  await page.getByRole("button", { name: "Voir l’aperçu" }).click();
+  await expect(page.locator(".preview-card")).toContainText("Pointure 29 EU");
+  await page.getByRole("button", { name: "Publier" }).click();
+  await expect(page.getByRole("button", { name: "Déposer une annonce" })).toBeVisible();
+
+  expect(published[0].sizes).toEqual(["28–29 EU", "29–31 EU"]);
+  expect(published[0].shoeSize).toBe(29);
+  const shoesCard = page.locator(".listing-card").filter({ hasText: "Baskets enfant" });
+  await expect(shoesCard.locator(".listing-card-age-details")).toContainText("5 et 6 ans · Pointure 29 EU");
 });
 
 test("a family publishes a listing in the Livres category with age, genre, author and language", async ({ page }) => {
@@ -300,13 +412,14 @@ test("a family publishes a listing in the Livres category with age, genre, autho
   await startListing(page, "Livres");
   const bookTypes = page.locator('select[name="subcategory"]');
   await expect(bookTypes.locator('option:not([value=""])')).toHaveCount(16);
+  await expectSubcategoryGroups(bookTypes, ["Albums et récits", "Découverte et apprentissage", "Éveil et activités"]);
   await expect(bookTypes.locator('option[value="Bande dessinée"]')).toHaveCount(1);
   await expect(bookTypes.locator('option[value="Manga"]')).toHaveCount(1);
   await expect(bookTypes.locator('option[value="Livre d’activités"]')).toHaveCount(1);
   await expect(bookTypes.locator('option[value="Autre"]')).toHaveCount(1);
   await bookTypes.selectOption("Autre");
   await page.getByLabel("Titre").fill("Le petit album");
-  await page.getByLabel("État").selectOption("Bon");
+  await page.getByLabel("État").selectOption({ label: "Bon état" });
   await expect(page.getByText("Précisez dans la description.")).toBeVisible();
   await page.getByRole("textbox", { name: "Auteur" }).fill("claude");
   await expect(page.getByRole("option", { name: "Claude Ponti" })).toBeVisible();
@@ -373,9 +486,10 @@ test("a family publishes a listing in the Jeux et jouets category with age, type
 
   await startListing(page, "Jeux et jouets");
   await page.getByLabel("Titre").fill("Circuit de train");
-  await page.getByLabel("État").selectOption("Très bon");
+  await page.getByLabel("État").selectOption({ label: "Très bon état" });
   const genre = page.locator('select[name="subcategory"]');
   await expect(genre.locator('option:not([value=""])')).toHaveCount(25);
+  await expectSubcategoryGroups(genre, ["Jeux de société et construction", "Imitation et figurines", "Jeux créatifs et éducatifs", "Plein air et mobilité"]);
   await expect(genre.locator('option[value="Jeu de plein air"]')).toHaveCount(1);
   await expect(genre.locator('option[value="Vélo enfant"]')).toHaveCount(1);
   await genre.selectOption("Jeu de plein air");
@@ -420,6 +534,7 @@ test("a family publishes a listing in the Matériel scolaire category with class
   await startListing(page, "Matériel scolaire");
   const schoolTypes = page.locator('select[name="subcategory"]');
   await expect(schoolTypes.locator('option:not([value=""])')).toHaveCount(26);
+  await expectSubcategoryGroups(schoolTypes, ["Papeterie et organisation", "Sacs et équipement", "Écriture et dessin", "Mesure et découpage", "Matériel de classe"]);
   await expect(schoolTypes.locator('option[value="Crayon de couleur"]')).toHaveCount(1);
   await schoolTypes.selectOption("Cartable");
   await page.getByLabel("Titre").fill("Cartable bleu");

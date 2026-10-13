@@ -11,12 +11,28 @@ const AGE_SIZES = {
   10: "135 à 140 cm",
   11: "141 à 152 cm (indicatif)",
 };
+const FOOTWEAR_SIZES = {
+  3: [25, 26],
+  4: [26, 28],
+  5: [28, 29],
+  6: [29, 31],
+  7: [31, 32],
+  8: [32, 34],
+  9: [34, 35],
+  10: [35, 36],
+  11: [37, 38],
+};
+const FOOTWEAR_SUBCATEGORIES = new Set(["Baskets", "Bottes de pluie", "Chaussures", "Sandales"]);
 const COLORS = [
   "Blanc", "Noir", "Gris", "Beige", "Marron", "Rouge", "Rose",
   "Orange", "Jaune", "Vert", "Bleu", "Violet", "Multicolore", "Autre",
 ];
 const LANGUAGES = ["Français", "Anglais", "Espagnol", "Allemand", "Italien", "Bilingue", "Autre"];
 const CONDITIONS = ["Neuf", "Très bon", "Bon", "Satisfaisant", "À réparer", "Autre"];
+const CONDITION_LABELS = {
+  "Très bon": "Très bon état",
+  Bon: "Bon état",
+};
 const MAX_PHOTOS = 3;
 const SUGGESTION_MAX_LENGTH = {
   brand: 70,
@@ -27,7 +43,13 @@ const CATEGORY_DETAILS = {
     icon: "👕",
     hint: "Hauts, pantalons, manteaux, chaussures…",
     titlePlaceholder: "Ex. Veste de pluie",
-    subcategories: ["Anorak", "Baskets", "Manteau", "Blouson", "Doudoune", "Imperméable", "Ciré", "Gilet", "Pull", "Sweat à capuche", "Sweat", "T-shirt manches courtes", "T-shirt manches longues", "Débardeur", "Chemise", "Blouse", "Tunique", "Robe", "Jupe", "Pantalon", "Jean", "Legging", "Jogging", "Short", "Bermuda", "Salopette", "Pyjama", "Camisole", "Maillot de corps", "Maillot de bain", "Chaussures", "Bottes de pluie", "Sandales", "Bonnet", "Écharpe", "Gants", "Moufles", "Casquette", "Autre"],
+    subcategoryGroups: [
+      { label: "Manteaux et vestes", options: ["Anorak", "Blouson", "Ciré", "Doudoune", "Imperméable", "Manteau"] },
+      { label: "Hauts", options: ["Blouse", "Camisole", "Chemise", "Débardeur", "Gilet", "Maillot de corps", "Pull", "Sweat", "Sweat à capuche", "T-shirt manches courtes", "T-shirt manches longues", "Tunique"] },
+      { label: "Bas et tenues", options: ["Bermuda", "Jean", "Jogging", "Jupe", "Legging", "Maillot de bain", "Pantalon", "Pyjama", "Robe", "Salopette", "Short"] },
+      { label: "Chaussures", options: ["Baskets", "Bottes de pluie", "Chaussures", "Sandales"] },
+      { label: "Accessoires", options: ["Bonnet", "Casquette", "Écharpe", "Gants", "Moufles"] },
+    ],
     photoCaptions: ["Devant · principale", "Étiquette taille/marque", "Détail / défaut"],
     photoGuidance: ["Le vêtement de devant", "L’étiquette de taille et de marque", "Les détails ou éventuels défauts"],
   },
@@ -35,7 +57,11 @@ const CATEGORY_DETAILS = {
     icon: "📚",
     hint: "Albums, romans, BD et manga, manuels…",
     titlePlaceholder: "Ex. Les albums de Claude Ponti",
-    subcategories: ["Album illustré", "Bande dessinée", "Manga", "Roman jeunesse", "Livre interactif", "Documentaire jeunesse", "Livre sonore", "Livre d’énigmes", "Dictionnaire enfant", "Encyclopédie jeunesse", "Recueil de contes", "Livre de comptines", "Livre de coloriage", "Livre d’activités", "Imagier", "Autre"],
+    subcategoryGroups: [
+      { label: "Albums et récits", options: ["Album illustré", "Bande dessinée", "Manga", "Recueil de contes", "Roman jeunesse"] },
+      { label: "Découverte et apprentissage", options: ["Dictionnaire enfant", "Documentaire jeunesse", "Encyclopédie jeunesse"] },
+      { label: "Éveil et activités", options: ["Imagier", "Livre d’activités", "Livre d’énigmes", "Livre de coloriage", "Livre de comptines", "Livre interactif", "Livre sonore"] },
+    ],
     photoCaptions: ["Couverture · principale", "Quatrième / ISBN", "Pages / défaut"],
     photoGuidance: ["La couverture", "La quatrième de couverture et l’ISBN", "Les pages ou défauts utiles à voir"],
   },
@@ -43,7 +69,12 @@ const CATEGORY_DETAILS = {
     icon: "🧸",
     hint: "Dinette, puzzles, jeux de société…",
     titlePlaceholder: "Ex. Circuit de train en bois",
-    subcategories: ["Jeu de société", "Jeu de cartes", "Puzzle", "Briques de construction", "Jeu de construction", "Figurine", "Poupée", "Peluche", "Voiture miniature", "Circuit de voitures", "Dînette", "Cuisine pour enfant", "Jeu d’imitation", "Déguisement", "Jeu éducatif", "Jeu électronique", "Coffret créatif", "Loisir créatif", "Instrument de musique", "Trottinette", "Vélo enfant", "Draisienne", "Jeu de plein air", "Ballon", "Autre"],
+    subcategoryGroups: [
+      { label: "Jeux de société et construction", options: ["Briques de construction", "Jeu de cartes", "Jeu de construction", "Jeu de société", "Puzzle"] },
+      { label: "Imitation et figurines", options: ["Circuit de voitures", "Cuisine pour enfant", "Déguisement", "Dînette", "Figurine", "Jeu d’imitation", "Peluche", "Poupée", "Voiture miniature"] },
+      { label: "Jeux créatifs et éducatifs", options: ["Coffret créatif", "Instrument de musique", "Jeu éducatif", "Jeu électronique", "Loisir créatif"] },
+      { label: "Plein air et mobilité", options: ["Ballon", "Draisienne", "Jeu de plein air", "Trottinette", "Vélo enfant"] },
+    ],
     photoCaptions: ["Vue d’ensemble · principale", "Contenu complet", "Règle / accessoires"],
     photoGuidance: ["La boîte ou la vue d’ensemble", "Le contenu complet étalé", "La règle, les accessoires et les pièces manquantes"],
   },
@@ -51,7 +82,13 @@ const CATEGORY_DETAILS = {
     icon: "🎒",
     hint: "Cartables, fournitures, papeterie…",
     titlePlaceholder: "Ex. Cartable bleu",
-    subcategories: ["Cartable", "Sac à dos scolaire", "Trousse", "Agenda scolaire", "Cahier de texte", "Cahier", "Protège-cahier", "Classeur", "Pochette de rangement", "Stylo", "Crayon de couleur", "Feutre", "Peinture", "Palette de peinture", "Règle", "Équerre", "Rapporteur", "Compas", "Ciseaux scolaires", "Crayon à papier", "Critérium", "Gomme", "Taille-crayon", "Ardoise effaçable", "Tablier de peinture", "Autre"],
+    subcategoryGroups: [
+      { label: "Papeterie et organisation", options: ["Agenda scolaire", "Cahier", "Cahier de texte", "Classeur", "Pochette de rangement", "Protège-cahier"] },
+      { label: "Sacs et équipement", options: ["Cartable", "Sac à dos scolaire", "Trousse"] },
+      { label: "Écriture et dessin", options: ["Crayon à papier", "Crayon de couleur", "Critérium", "Feutre", "Gomme", "Palette de peinture", "Peinture", "Stylo", "Tablier de peinture", "Taille-crayon"] },
+      { label: "Mesure et découpage", options: ["Ciseaux scolaires", "Compas", "Équerre", "Rapporteur", "Règle"] },
+      { label: "Matériel de classe", options: ["Ardoise effaçable"] },
+    ],
     photoCaptions: ["Vue d’ensemble · principale", "Étiquette / marque", "Contenu / défaut"],
     photoGuidance: ["La vue d’ensemble", "L’étiquette ou la marque si utile", "Le contenu, les accessoires ou défauts"],
   },
@@ -73,6 +110,7 @@ function emptyDraft() {
     category: "",
     title: "",
     subcategory: "",
+    shoeSize: "",
     description: "",
     condition: "",
     ageGroups: [],
@@ -85,6 +123,10 @@ function emptyDraft() {
   };
 }
 
+function subcategoriesFor(category) {
+  return [...category.subcategoryGroups.flatMap((group) => group.options), "Autre"];
+}
+
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (character) => ({
     "&": "&amp;",
@@ -95,18 +137,62 @@ function escapeHtml(value) {
   })[character]);
 }
 
+function conditionLabel(condition) {
+  return CONDITION_LABELS[condition] || condition;
+}
+
 function sizesForAges(ageGroups) {
   return [...new Set(ageGroups.map((age) => AGE_SIZES[age]).filter(Boolean))];
+}
+
+function footwearSizesForAges(ageGroups) {
+  return [...new Set(ageGroups
+    .map((age) => FOOTWEAR_SIZES[age])
+    .filter(Boolean)
+    .map(([start, end]) => `${start}–${end} EU`))];
+}
+
+function footwearSizeOptionsForAges(ageGroups) {
+  return [...new Set(ageGroups.flatMap((age) => {
+    const range = FOOTWEAR_SIZES[age];
+    return range ? Array.from({ length: range[1] - range[0] + 1 }, (_, index) => range[0] + index) : [];
+  }))].sort((left, right) => left - right);
+}
+
+function sizesForSubcategory(subcategory, ageGroups) {
+  return FOOTWEAR_SUBCATEGORIES.has(subcategory)
+    ? footwearSizesForAges(ageGroups)
+    : sizesForAges(ageGroups);
+}
+
+function compactSizes(sizes) {
+  const ranges = [];
+  const otherLabels = [];
+  for (const size of sizes) {
+    const match = size.match(/(\d+)\s*(?:à|[-–])\s*(\d+)\s*(cm|EU)\b/i);
+    if (match) ranges.push([match[3].toUpperCase(), Number(match[1]), Number(match[2])]);
+    else otherLabels.push(size);
+  }
+  ranges.sort(([leftUnit, left], [rightUnit, right]) => leftUnit.localeCompare(rightUnit) || left - right);
+  const mergedRanges = [];
+  for (const [unit, start, end] of ranges) {
+    const previous = mergedRanges.at(-1);
+    if (previous && unit === previous[0] && start <= previous[2] + 1) previous[2] = Math.max(previous[2], end);
+    else mergedRanges.push([unit, start, end]);
+  }
+  return [...otherLabels, ...mergedRanges.map(([unit, start, end]) => `${start}–${end} ${unit === "CM" ? "cm" : unit}`)].join(", ");
 }
 
 function schoolLevelsForAges(ageGroups) {
   return [...new Set(ageGroups.map((age) => SCHOOL_LEVELS[age]).filter(Boolean))];
 }
 
-function derivedAgeDetails(category, ageGroups) {
+function derivedAgeDetails(category, ageGroups, subcategory) {
   if (category === "Vêtements") {
-    const sizes = sizesForAges(ageGroups);
-    return sizes.length ? `Tailles correspondantes : ${sizes.join(" / ")}` : "Choisissez un ou plusieurs âges.";
+    const footwear = FOOTWEAR_SUBCATEGORIES.has(subcategory);
+    const sizes = compactSizes(sizesForSubcategory(subcategory, ageGroups));
+    const label = footwear ? "Pointures correspondantes" : "Tailles correspondantes";
+    return sizes ? `${label} : ${sizes}` : "Choisissez un ou plusieurs âges.";
   }
   if (category === "Matériel scolaire") {
     const levels = schoolLevelsForAges(ageGroups);
@@ -226,21 +312,29 @@ export function createMarketplace({
 
   function listingDetails(listing) {
     const ages = Array.isArray(listing.ageGroups) ? listing.ageGroups : [];
-    const categoryDetails = [listing.subcategory];
+    const itemDetails = [listing.subcategory];
     const ageDetails = [ageLabel(ages)];
     if (listing.category === "Vêtements") {
-      const sizes = Array.isArray(listing.sizes) && listing.sizes.length
-        ? listing.sizes
-        : sizesForAges(ages);
-      categoryDetails.push(listing.brand, listing.color);
-      ageDetails.push(...sizes);
+      const footwear = FOOTWEAR_SUBCATEGORIES.has(listing.subcategory);
+      const sizes = footwear
+        ? footwearSizesForAges(ages)
+        : Array.isArray(listing.sizes) && listing.sizes.length
+          ? listing.sizes
+          : sizesForAges(ages);
+      itemDetails.push(listing.brand, listing.color);
+      if (footwear && Number.isInteger(listing.shoeSize) && listing.shoeSize > 0) {
+        ageDetails.push(`Pointure ${listing.shoeSize} EU`);
+      } else {
+        const compactSize = compactSizes(sizes);
+        if (compactSize) ageDetails.push(compactSize);
+      }
     } else {
-      if (listing.category === "Livres") categoryDetails.push(listing.author, listing.language);
-      else categoryDetails.push(listing.brand);
+      if (listing.category === "Livres") itemDetails.push(listing.author, listing.language);
+      else itemDetails.push(listing.brand);
       if (listing.category === "Matériel scolaire") ageDetails.push(...schoolLevelsForAges(ages));
     }
     return {
-      category: categoryDetails.filter(Boolean),
+      item: itemDetails.filter(Boolean),
       ages: ageDetails.filter(Boolean),
     };
   }
@@ -251,15 +345,19 @@ export function createMarketplace({
       ? `<img src="${escapeHtml(getListingPhotoUrl(storage, photosBucketId, photoId))}" alt="Photo principale de ${escapeHtml(listing.title)}">`
       : `<div class="listing-photo-placeholder" aria-hidden="true">${escapeHtml(CATEGORY_DETAILS[listing.category]?.icon || "📦")}</div>`;
     const details = listingDetails(listing);
+    const itemDetailsMarkup = details.item.map(escapeHtml).join(" · ");
 
     return `<article class="listing-card">
       <div class="listing-photo">${photoMarkup}</div>
       <div class="listing-card-content">
         <p class="listing-price">${escapeHtml(priceLabel(listing.price))}</p>
         <h2>${escapeHtml(listing.title)}</h2>
-        <p class="listing-card-details">${details.category.map(escapeHtml).join(" · ")}</p>
+        <p class="listing-card-details">${itemDetailsMarkup}</p>
         <p class="listing-card-age-details">${details.ages.map(escapeHtml).join(" · ")}</p>
-        <p class="listing-condition">${escapeHtml(listing.condition)}</p>
+        <div class="listing-card-footer">
+          <span class="listing-card-tag listing-category-tag">${escapeHtml(listing.category)}</span>
+          <span class="listing-card-tag listing-condition-tag">${escapeHtml(conditionLabel(listing.condition))}</span>
+        </div>
       </div>
     </article>`;
   }
@@ -330,10 +428,20 @@ export function createMarketplace({
     const ageHint = draft.category === "Vêtements" || draft.category === "Matériel scolaire"
       ? "Les âges sélectionnés déterminent automatiquement les indications correspondantes."
       : "Choisissez un ou plusieurs âges concernés par cet objet.";
-    const derivedLabel = derivedAgeDetails(draft.category, draft.ageGroups);
+    const derivedLabel = derivedAgeDetails(draft.category, draft.ageGroups, draft.subcategory);
+    const footwear = FOOTWEAR_SUBCATEGORIES.has(draft.subcategory);
+    const shoeSizeOptions = footwearSizeOptionsForAges(draft.ageGroups);
+    const shoeSizeField = footwear
+      ? `<div class="form-field">
+          <label for="draft-shoe-size">Pointure</label>
+          <select id="draft-shoe-size" name="shoeSize" required${shoeSizeOptions.length ? "" : " disabled"}><option value="">Choisir une pointure</option>${shoeSizeOptions.map((size) => `<option value="${size}"${draft.shoeSize === String(size) ? " selected" : ""}>${size}</option>`).join("")}</select>
+          <span class="field-hint shoe-size-hint">Les pointures proposées dépendent des âges sélectionnés.</span>
+        </div>`
+      : "";
     const subcategoryMarkup = `<div class="form-field">
       <label for="draft-subcategory">Genre/Type</label>
-      <select id="draft-subcategory" name="subcategory" required><option value="">Choisir un genre/type</option>${category.subcategories.map((subcategory) => `<option value="${escapeHtml(subcategory)}"${draft.subcategory === subcategory ? " selected" : ""}>${escapeHtml(subcategory)}</option>`).join("")}</select>
+      <select id="draft-subcategory" name="subcategory" required><option value="">Choisir un genre/type</option>${category.subcategoryGroups.map((group) => `<optgroup label="${escapeHtml(group.label)}">${group.options.map((subcategory) => `<option value="${escapeHtml(subcategory)}"${draft.subcategory === subcategory ? " selected" : ""}>${escapeHtml(subcategory)}</option>`).join("")}</optgroup>`).join("")}<option value="Autre"${draft.subcategory === "Autre" ? " selected" : ""}>Autre</option></select>
+      <span class="field-hint">Les types sont regroupés par famille et classés par ordre alphabétique.</span>
       <span class="field-hint subcategory-other-hint"${draft.subcategory === "Autre" ? "" : " hidden"}>Précisez dans la description.</span>
     </div>`;
     const brandField = `<div class="form-field">
@@ -366,7 +474,7 @@ export function createMarketplace({
         <div class="object-form-grid">
           ${subcategoryMarkup}
           <label class="form-field">État
-            <select name="condition" required><option value="">Choisir l’état</option>${CONDITIONS.map((condition) => `<option value="${escapeHtml(condition)}"${draft.condition === condition ? " selected" : ""}>${escapeHtml(condition)}</option>`).join("")}</select>
+            <select name="condition" required><option value="">Choisir l’état</option>${CONDITIONS.map((condition) => `<option value="${escapeHtml(condition)}"${draft.condition === condition ? " selected" : ""}>${escapeHtml(conditionLabel(condition))}</option>`).join("")}</select>
             <span class="field-hint condition-other-hint"${draft.condition === "Autre" ? "" : " hidden"}>Précisez l’état de l’objet dans la description.</span>
           </label>
           <fieldset class="age-picker">
@@ -379,6 +487,7 @@ export function createMarketplace({
             <input name="title" value="${escapeHtml(draft.title)}" maxlength="70" placeholder="${escapeHtml(category.titlePlaceholder)}" required>
           </label>
           ${extraFields}
+          ${shoeSizeField}
           <label class="form-field">Prix (€)
             <input name="price" type="number" min="0" step="1" value="${escapeHtml(draft.price)}" placeholder="0 pour donner" required>
             <span class="field-hint price-hint">${Number(draft.price || 0) === 0 ? "0 € sera affiché comme un don." : "Prix affiché aux autres familles."}</span>
@@ -407,11 +516,15 @@ export function createMarketplace({
 
   function previewStepMarkup() {
     const ages = ageLabel(draft.ageGroups);
-    const derived = draft.category === "Vêtements"
-      ? sizesForAges(draft.ageGroups).join(" / ")
+    const footwear = FOOTWEAR_SUBCATEGORIES.has(draft.subcategory);
+    const derived = draft.category === "Vêtements" && !footwear
+      ? compactSizes(sizesForAges(draft.ageGroups))
       : draft.category === "Matériel scolaire"
         ? schoolLevelsForAges(draft.ageGroups).join(" / ")
         : "";
+    const ageDetails = footwear
+      ? `${ages} · Pointure ${draft.shoeSize} EU`
+      : `${ages}${derived ? ` · ${derived}` : ""}`;
     const details = previewDetailValues();
     return `<section class="wizard-panel" aria-labelledby="preview-heading">
       <p class="fixed-category">Catégorie choisie : ${escapeHtml(draft.category)}</p>
@@ -420,10 +533,10 @@ export function createMarketplace({
       <article class="preview-card">
         <div class="preview-image"><img src="${escapeHtml(draft.photos[0]?.url || "")}" alt="Photo principale de ${escapeHtml(draft.title)}"></div>
         <div class="preview-details">
-          <p class="listing-condition">${escapeHtml(draft.condition)}</p>
+          <p class="listing-condition">${escapeHtml(conditionLabel(draft.condition))}</p>
           <h3>${escapeHtml(draft.title)}</h3>
-          <p>${escapeHtml(draft.category)}${details.length ? ` · ${details.map(escapeHtml).join(" · ")}` : ""}</p>
-          <p>${escapeHtml(ages)}${derived ? ` · ${escapeHtml(derived)}` : ""}</p>
+          <p>${details.map(escapeHtml).join(" · ")}</p>
+          <p>${escapeHtml(ageDetails)}</p>
           <p class="listing-price">${escapeHtml(priceLabel(draft.price))}</p>
           <p>${escapeHtml(draft.description || "Aucune description ajoutée.")}</p>
         </div>
@@ -448,6 +561,15 @@ export function createMarketplace({
 
   function render() {
     root.innerHTML = `<div class="market-app">${headerMarkup()}${view === "wizard" ? wizardMarkup() : listMarkup()}</div>`;
+  }
+
+  function updateFootwearSizeOptions() {
+    const select = root.querySelector("#draft-shoe-size");
+    if (!select) return;
+    const options = footwearSizeOptionsForAges(draft.ageGroups);
+    if (!options.includes(Number(draft.shoeSize))) draft.shoeSize = "";
+    select.disabled = options.length === 0;
+    select.innerHTML = `<option value="">Choisir une pointure</option>${options.map((size) => `<option value="${size}"${draft.shoeSize === String(size) ? " selected" : ""}>${size}</option>`).join("")}`;
   }
 
   function releasePhotoUrls() {
@@ -485,7 +607,13 @@ export function createMarketplace({
       agePicker.querySelector('input[name="ageGroup"]').focus();
       return false;
     }
-    if (!CATEGORY_DETAILS[draft.category]?.subcategories?.includes(draft.subcategory)) {
+    if (FOOTWEAR_SUBCATEGORIES.has(draft.subcategory)
+      && !footwearSizeOptionsForAges(draft.ageGroups).includes(Number(draft.shoeSize))) {
+      setMessage("Choisissez une pointure correspondant aux âges sélectionnés.", "error");
+      root.querySelector("#draft-shoe-size")?.focus();
+      return false;
+    }
+    if (!CATEGORY_DETAILS[draft.category] || !subcategoriesFor(CATEGORY_DETAILS[draft.category]).includes(draft.subcategory)) {
       setMessage("Choisissez un type ou un genre dans la liste.", "error");
       return false;
     }
@@ -564,10 +692,11 @@ export function createMarketplace({
         category: draft.category,
         condition: draft.condition,
         ageGroups: [...draft.ageGroups].sort((left, right) => left - right),
-        sizes: draft.category === "Vêtements" ? sizesForAges(draft.ageGroups) : [],
+        sizes: draft.category === "Vêtements" ? sizesForSubcategory(draft.subcategory, draft.ageGroups) : [],
         color: draft.category === "Vêtements" ? draft.color : "",
         brand: draft.brand.trim(),
         subcategory: draft.subcategory,
+        ...(FOOTWEAR_SUBCATEGORIES.has(draft.subcategory) ? { shoeSize: Number(draft.shoeSize) } : {}),
         author: draft.author.trim(),
         language: draft.language.trim(),
         price: Number(draft.price),
@@ -695,9 +824,10 @@ export function createMarketplace({
   root.addEventListener("input", (event) => {
     const target = event.target;
     if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement)) return;
-    if (["title", "description", "condition", "color", "brand", "author", "language", "price", "subcategory"].includes(target.name)) {
+    if (["title", "description", "condition", "color", "brand", "author", "language", "price", "subcategory", "shoeSize"].includes(target.name)) {
       draft[target.name] = target.value;
     }
+    if (target.name === "subcategory" && !FOOTWEAR_SUBCATEGORIES.has(draft.subcategory)) draft.shoeSize = "";
     if (target.dataset.suggestionKey) {
       const list = root.querySelector(`#suggestions-${target.dataset.suggestionKey}`);
       const toggle = root.querySelector(`[data-action="toggle-suggestions"][data-key="${target.dataset.suggestionKey}"]`);
@@ -748,7 +878,8 @@ export function createMarketplace({
         .map((input) => Number(input.value))
         .sort((left, right) => left - right);
       const derivedSizes = root.querySelector("#derived-sizes");
-      if (derivedSizes) derivedSizes.textContent = derivedAgeDetails(draft.category, draft.ageGroups);
+      if (derivedSizes) derivedSizes.textContent = derivedAgeDetails(draft.category, draft.ageGroups, draft.subcategory);
+      updateFootwearSizeOptions();
       root.querySelector(".age-picker")?.removeAttribute("aria-invalid");
       return;
     }

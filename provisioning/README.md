@@ -71,7 +71,7 @@ npm install --prefix provisioning
 npm run setup --prefix provisioning
 ```
 
-Le script crée la base si nécessaire, puis la collection et le bucket. Il peut être relancé : il vérifie les ressources existantes, ajoute les attributs facultatifs de catégorie qui manquent dans une collection existante, et ne recrée pas les ressources déjà conformes. Il échoue explicitement si une collection ou un bucket existe avec un schéma ou des permissions incompatibles ; corrigez alors la configuration Appwrite et relancez-le.
+Le script crée la base si nécessaire, puis la collection et le bucket. Il peut être relancé : il vérifie les ressources existantes, ajoute les attributs facultatifs attendus qui manquent dans une collection existante (y compris la pointure entière `shoeSize`), et ne recrée pas les ressources déjà conformes. Il échoue explicitement si une collection ou un bucket existe avec un schéma ou des permissions incompatibles ; corrigez alors la configuration Appwrite et relancez-le.
 
 La création de la base, de la collection et du bucket n’est pas une transaction. Si une étape échoue après la création d’une ressource, le script indique l’erreur ; corrigez le problème puis relancez-le pour terminer le provisionnement.
 
