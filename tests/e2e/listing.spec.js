@@ -193,6 +193,94 @@ test("listing cards show category and condition as footer tags", async ({ page }
   expect(await manySizesCard.evaluate((card) => card.getBoundingClientRect().height)).toBeGreaterThan(390);
 });
 
+test("families can filter listings on mobile and clear their criteria", async ({ page }) => {
+  const listings = [
+    {
+      ...existingListing(),
+      $id: "clothing-kiabi",
+      title: "Pull Kiabi",
+    },
+    {
+      ...existingListing(),
+      $id: "clothing-petit-bateau",
+      title: "Manteau Petit Bateau",
+      condition: "Neuf",
+      subcategory: "Manteau",
+      ageGroups: [6],
+      sizes: ["111 à 116 cm"],
+      brand: "Petit Bateau",
+    },
+    {
+      ...existingListing(),
+      $id: "book-claude-ponti",
+      title: "Album de Claude Ponti",
+      category: "Livres",
+      subcategory: "Album illustré",
+      author: "Claude Ponti",
+      language: "Français",
+    },
+    {
+      ...existingListing(),
+      $id: "toy-djeco",
+      title: "Puzzle Djeco",
+      category: "Jeux et jouets",
+      subcategory: "Puzzle",
+      brand: "Djeco",
+    },
+    {
+      ...existingListing(),
+      $id: "school-tanns",
+      title: "Cartable Tann’S",
+      category: "Matériel scolaire",
+      subcategory: "Cartable",
+      brand: "Tann’S",
+      ageGroups: [6],
+    },
+  ];
+  await installMarketplaceApi(page, listings);
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto("/");
+  await expect(page.locator(".listing-card")).toHaveCount(5);
+
+  await page.getByLabel("Catégorie").selectOption("Vêtements");
+  await expect(page.locator(".listing-card")).toHaveCount(2);
+  await expect(page.getByRole("group", { name: "État de l’objet" })).toBeVisible();
+  await expect(page.getByLabel("Type / genre")).toBeVisible();
+  await expect(page.getByLabel("Marque")).toBeVisible();
+  await expect(page.getByLabel("Âge – taille")).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+  await page.getByLabel("Âge – taille").selectOption("5");
+  await expect(page.locator(".listing-card")).toHaveCount(1);
+  await page.getByRole("button", { name: "Tout effacer" }).click();
+  await expect(page.locator(".listing-card")).toHaveCount(5);
+
+  await page.getByLabel("Bon", { exact: true }).check();
+  await expect(page.locator(".listing-card")).toHaveCount(4);
+  await page.getByRole("button", { name: "Tout effacer" }).click();
+  await expect(page.locator(".listing-card")).toHaveCount(5);
+
+  const categoryFilters = [
+    ["Livres", ["Type / genre", "Auteur / autrice", "Langue", "Âge"]],
+    ["Jeux et jouets", ["Type / genre", "Marque", "Âge"]],
+    ["Matériel scolaire", ["Type / genre", "Marque", "Âge – classe"]],
+  ];
+  for (const [category, labels] of categoryFilters) {
+    await page.getByLabel("Catégorie").selectOption(category);
+    for (const label of labels) {
+      await expect(page.getByLabel(label)).toBeVisible();
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  }
+
+  await page.getByLabel("Catégorie").selectOption("Vêtements");
+  await page.getByLabel("Marque").selectOption("Kiabi");
+  await expect(page.locator(".listing-card")).toHaveCount(1);
+  await expect(page.getByRole("heading", { name: "Pull Kiabi" })).toBeVisible();
+  await page.getByRole("button", { name: "Tout effacer" }).click();
+  await expect(page.locator(".listing-card")).toHaveCount(5);
+});
+
 test("a family publishes a clothing listing and sees it in the uniform listing grid", async ({ page }) => {
   const listings = [existingListing()];
   const published = [];
