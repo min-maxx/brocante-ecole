@@ -19,19 +19,24 @@ function existingListing() {
     color: "Rouge",
     brand: "Kiabi",
     price: 4,
+    sellerId: "seller-2",
+    sellerInitials: "S. V.",
     photoIds: ["existing-photo"],
   };
 }
 
 async function installMarketplaceApi(page, initialListings = []) {
   const listings = [...initialListings];
+  const requests = [];
   const published = [];
+  const createdRequests = [];
   let uploadedPhotos = 0;
 
   await page.route("**/v1/**", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
     const path = url.pathname;
+    const collectionId = path.split("/collections/")[1]?.split("/")[0];
 
     if (path.endsWith("/account") && request.method() === "GET") {
       await route.fulfill({ json: { $id: "family-1", name: "Famille Test", email: "famille@example.test" } });
@@ -62,20 +67,35 @@ async function installMarketplaceApi(page, initialListings = []) {
     }
 
     if (path.includes("/databases/") && path.endsWith("/documents") && request.method() === "GET") {
-      await route.fulfill({ json: { total: listings.length, documents: listings } });
+      const documents = collectionId === "e2e-requests"
+        ? requests.filter((item) => item.buyerId === "family-1")
+        : listings;
+      await route.fulfill({ json: { total: documents.length, documents } });
       return;
     }
 
     if (path.includes("/databases/") && path.endsWith("/documents") && request.method() === "POST") {
-      const { data } = request.postDataJSON();
-      const listing = {
-        ...data,
-        $id: `listing-${listings.length + 1}`,
-        $createdAt: "2026-10-10T10:00:00.000Z",
-      };
-      published.push(listing);
-      listings.unshift(listing);
-      await route.fulfill({ status: 201, json: listing });
+      const { data, permissions = [] } = request.postDataJSON();
+      if (collectionId === "e2e-requests") {
+        const purchaseRequest = {
+          ...data,
+          $id: `request-${requests.length + 1}`,
+          $createdAt: "2026-10-10T10:00:00.000Z",
+          $permissions: permissions,
+        };
+        createdRequests.push(purchaseRequest);
+        requests.unshift(purchaseRequest);
+        await route.fulfill({ status: 201, json: purchaseRequest });
+      } else {
+        const listing = {
+          ...data,
+          $id: `listing-${listings.length + 1}`,
+          $createdAt: "2026-10-10T10:00:00.000Z",
+        };
+        published.push(listing);
+        listings.unshift(listing);
+        await route.fulfill({ status: 201, json: listing });
+      }
       return;
     }
 
@@ -85,7 +105,7 @@ async function installMarketplaceApi(page, initialListings = []) {
     });
   });
 
-  return { listings, published };
+  return { listings, published, requests, createdRequests };
 }
 
 async function startListing(page, category) {
@@ -216,6 +236,66 @@ test("a family can open an announcement, browse its photos, and return to the li
 
   await page.getByRole("button", { name: "Retour aux annonces" }).click();
   await expect(page.getByRole("heading", { name: "Les annonces du marché" })).toBeVisible();
+});
+
+test("a family can send a prefilled offer and find its pending status in purchases", async ({ page }) => {
+  const { createdRequests } = await installMarketplaceApi(page, [existingListing()]);
+
+  await page.goto("/");
+  await page.getByRole("link", { name: "Consulter l’annonce : Pull en laine" }).click();
+
+  const offerAmount = page.getByRole("spinbutton", { name: "Votre offre" });
+  await expect(offerAmount).toHaveValue("4");
+  await offerAmount.fill("3");
+  await page.getByRole("button", { name: "Envoyer une offre" }).click();
+
+  await expect(page.getByRole("heading", { name: "Mes achats" })).toBeVisible();
+  await expect(page.locator(".purchase-card")).toContainText("Pull en laine");
+  await expect(page.locator(".purchase-card")).toContainText("Offre de prix");
+  await expect(page.locator(".purchase-card")).toContainText("3 € proposés");
+  await expect(page.locator(".purchase-card-status")).toHaveText("Statut : En attente");
+  expect(createdRequests).toHaveLength(1);
+  expect(createdRequests[0]).toMatchObject({
+    listingId: "existing-listing",
+    listingPrice: 4,
+    buyerId: "family-1",
+    sellerId: "seller-2",
+    type: "offer",
+    amount: 3,
+    status: "pending",
+  });
+  expect(createdRequests[0].$permissions).toContain('read("user:family-1")');
+  expect(createdRequests[0].$permissions).toContain('read("user:seller-2")');
+  expect(createdRequests[0].$permissions).toContain('update("user:seller-2")');
+
+  await page.reload();
+  await page.getByRole("button", { name: "Mes achats" }).click();
+  await expect(page.locator(".purchase-card-status")).toHaveText("Statut : En attente");
+});
+
+test("a free listing sends a donation request instead of an offer", async ({ page }) => {
+  const freeListing = { ...existingListing(), price: 0, title: "Livre à donner" };
+  const { createdRequests } = await installMarketplaceApi(page, [freeListing]);
+
+  await page.goto("/");
+  await page.getByRole("link", { name: "Consulter l’annonce : Livre à donner" }).click();
+
+  await expect(page.getByRole("spinbutton", { name: "Votre offre" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Demander ce don" }).click();
+
+  await expect(page.getByRole("heading", { name: "Mes achats" })).toBeVisible();
+  await expect(page.locator(".purchase-card")).toContainText("Demande de don");
+  await expect(page.locator(".purchase-card")).toContainText("Don demandé");
+  await expect(page.locator(".purchase-card-status")).toHaveText("Statut : En attente");
+  expect(createdRequests).toHaveLength(1);
+  expect(createdRequests[0]).toMatchObject({
+    listingId: "existing-listing",
+    buyerId: "family-1",
+    sellerId: "seller-2",
+    type: "donation",
+    amount: 0,
+    status: "pending",
+  });
 });
 
 test("listing cards show category and condition as footer tags", async ({ page }) => {

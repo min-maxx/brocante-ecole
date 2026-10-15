@@ -104,7 +104,7 @@ Configurez ces variables dans la fonction :
 Le hostname de `APPWRITE_SIGNUP_CALLBACK_URL` (par exemple `brocante-esmj.appwrite.network`) doit être enregistré comme plateforme Web à l’étape 1 **dans le même projet Appwrite que la fonction**. Sans cela, Appwrite rejettera le lien de vérification.
 
 <a id="configuration-annonces-photos"></a>
-## 🗂️ Provisionner les annonces et les photos
+## 🗂️ Provisionner les annonces, les demandes et les photos
 
 Les ressources du marché se créent depuis le répertoire isolé [`provisioning/`](./provisioning/), à l’écart du code de l’application. Le script utilise le Server SDK Appwrite, crée les ressources manquantes et ajoute les attributs facultatifs de catégorie manquants aux collections `listings` existantes. Si une ressource existante a un schéma incompatible ou des permissions incorrectes, il s’arrête avec une erreur plutôt que de la modifier ou supprimer. Consultez le [guide détaillé du provisionnement](./provisioning/README.md) pour créer la clé API et configurer l’outil.
 
@@ -124,7 +124,10 @@ npm run setup --prefix provisioning
 | `APPWRITE_API_KEY` | Clé de provisionnement secrète à durée de vie limitée |
 | `APPWRITE_DATABASE_ID` | Identifiant de la base à créer ou réutiliser |
 | `APPWRITE_LISTINGS_COLLECTION_ID` | Identifiant de la collection, prérempli à `listings` dans l’exemple |
+| `APPWRITE_REQUESTS_COLLECTION_ID` | Identifiant de la collection des demandes, prérempli à `requests` dans l’exemple |
 | `APPWRITE_LISTING_PHOTOS_BUCKET_ID` | Identifiant du bucket, prérempli à `listing-photos` dans l’exemple |
+
+Le provisionnement crée aussi `requests` en sécurité par document, avec uniquement la création au niveau collection. Chaque demande est lisible par ses deux familles participantes et modifiable par le vendeur.
 
 Le script crée la base si elle n’existe pas, puis la collection `listings` avec la **sécurité des documents activée** et le bucket `listing-photos` avec la **sécurité des fichiers activée**. Il configure la lecture et la création pour les utilisateurs connectés ; l’application donne ensuite les droits de mise à jour et de suppression au propriétaire de chaque annonce et de chaque photo. Si la base est déjà utilisée pour la liste privée d’adresses autorisées, renseignez exactement le même `APPWRITE_DATABASE_ID` que celui configuré dans la fonction d’inscription.
 
@@ -146,9 +149,27 @@ Le script crée la base si elle n’existe pas, puis la collection `listings` av
 | `shoeSize` | Entier | Non |
 | `author` | Chaîne, 70 caractères | Non |
 | `language` | Chaîne, 40 caractères | Non |
+| `sellerId` | Chaîne, 36 caractères | Non |
 | `sellerInitials` | Chaîne, 20 caractères | Non |
 
-Le formulaire envoie toujours `description` et `brand`. Si leur valeur est facultative et omise, il envoie une chaîne vide afin que les attributs requis soient présents. `sellerInitials` contient les initiales extraites de la partie locale de l’adresse e-mail du vendeur, sans enregistrer ni afficher son adresse complète. Le provisionnement ajoute ce nouvel attribut facultatif aux collections `listings` existantes. `subcategory` stocke le genre ou le type pour toutes les catégories; les listes sont regroupées par famille et triées alphabétiquement à l’intérieur de chaque groupe, avec « Autre » en dernier. Pour les types de chaussures, les âges sélectionnés limitent les pointures proposées; la pointure choisie est obligatoire et enregistrée dans `shoeSize`. Les autres vêtements conservent les équivalences de taille en centimètres. Les plages contiguës sont regroupées pour une lecture plus rapide dans les annonces. Les classes du matériel scolaire sont calculées à partir des âges et ne sont pas saisies ni enregistrées séparément.
+Le formulaire envoie toujours `description` et `brand`. Si leur valeur est facultative et omise, il envoie une chaîne vide afin que les attributs requis soient présents. `sellerId` identifie le compte vendeur pour limiter l’accès à ses demandes; le provisionnement ajoute cet attribut facultatif aux collections `listings` existantes. `sellerInitials` contient les initiales extraites de la partie locale de l’adresse e-mail du vendeur, sans enregistrer ni afficher son adresse complète. `subcategory` stocke le genre ou le type pour toutes les catégories; les listes sont regroupées par famille et triées alphabétiquement à l’intérieur de chaque groupe, avec « Autre » en dernier. Pour les types de chaussures, les âges sélectionnés limitent les pointures proposées; la pointure choisie est obligatoire et enregistrée dans `shoeSize`. Les autres vêtements conservent les équivalences de taille en centimètres. Les plages contiguës sont regroupées pour une lecture plus rapide dans les annonces. Les classes du matériel scolaire sont calculées à partir des âges et ne sont pas saisies ni enregistrées séparément.
+
+### Schéma de la collection `requests`
+
+| Attribut | Type et limite | Requis |
+| --- | --- | :---: |
+| `listingId` | Chaîne, 36 caractères | Oui |
+| `listingTitle` | Chaîne, 70 caractères | Oui |
+| `listingPrice` | Entier | Oui |
+| `listingPhotoId` | Chaîne, 36 caractères | Non |
+| `sellerInitials` | Chaîne, 20 caractères | Non |
+| `buyerId` | Chaîne, 36 caractères | Oui |
+| `sellerId` | Chaîne, 36 caractères | Oui |
+| `type` | Chaîne, 20 caractères (`offer` ou `donation`) | Oui |
+| `amount` | Entier (0 pour une demande de don) | Oui |
+| `status` | Chaîne, 20 caractères (`pending`, `accepted` ou `rejected`) | Oui |
+
+La collection des demandes autorise uniquement la création par les familles connectées; chaque document n’est lisible que par l’acheteur et le vendeur et seul le vendeur peut le mettre à jour. L’index `by_buyer` permet de retrouver les demandes de l’acheteur connecté.
 
 Pour les livres, la langue se choisit parmi Français, Anglais, Espagnol, Allemand, Italien, Bilingue et Autre. Le choix « Autre » requiert une précision dans la description.
 
@@ -165,6 +186,7 @@ Les identifiants Appwrite de la base, de la collection, du bucket et de la fonct
 | `VITE_APPWRITE_SIGNUP_FUNCTION_ID` | Identifiant de la fonction `create-family-account` |
 | `VITE_APPWRITE_DATABASE_ID` | Même identifiant de base que `APPWRITE_DATABASE_ID` |
 | `VITE_APPWRITE_LISTINGS_COLLECTION_ID` | Identifiant de la collection `listings` |
+| `VITE_APPWRITE_REQUESTS_COLLECTION_ID` | Identifiant de la collection des demandes `requests` |
 | `VITE_APPWRITE_LISTING_PHOTOS_BUCKET_ID` | Identifiant du bucket `listing-photos` |
 
 <a id="developpement-tests"></a>

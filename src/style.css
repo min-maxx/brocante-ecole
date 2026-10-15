@@ -203,6 +203,22 @@ button:disabled {
   gap: 10px;
 }
 
+.market-nav {
+  display: flex;
+  gap: 8px;
+}
+
+.market-nav button {
+  min-height: 40px;
+  padding: 8px 13px;
+}
+
+.market-nav button.active {
+  border-color: #b9c9bb;
+  background: #e9eee4;
+  color: #32655a;
+}
+
 .market-brand {
   color: #26352d;
   font-size: 17px;
@@ -582,6 +598,98 @@ button:disabled {
   color: #46524d;
   line-height: 1.6;
   white-space: pre-wrap;
+}
+
+.purchase-request {
+  display: grid;
+  gap: 14px;
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid #e9ece5;
+}
+
+.purchase-request h2 {
+  margin: 0;
+  font-size: 1.12rem;
+}
+
+.purchase-request-form {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.7fr) minmax(0, 1.3fr);
+  gap: 12px;
+  align-items: end;
+}
+
+.purchase-request-form .form-field {
+  gap: 7px;
+}
+
+.purchase-request-form button {
+  padding: 10px 14px;
+}
+
+.purchase-request-note {
+  margin: 0;
+  color: #596560;
+  line-height: 1.5;
+}
+
+.purchase-list {
+  display: grid;
+  gap: 14px;
+}
+
+.purchase-card {
+  display: grid;
+  grid-template-columns: 130px minmax(0, 1fr);
+  gap: 18px;
+  overflow: hidden;
+  padding: 14px;
+  border: 1px solid #e0e5dc;
+  border-radius: 14px;
+  background: #fffefa;
+  box-shadow: 0 7px 22px rgb(38 50 43 / 5%);
+}
+
+.purchase-card-photo {
+  display: grid;
+  min-height: 130px;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 10px;
+  background: #e9eee4;
+  font-size: 2rem;
+}
+
+.purchase-card-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.purchase-card-content {
+  align-self: center;
+  min-width: 0;
+}
+
+.purchase-card-content .eyebrow {
+  margin-bottom: 4px;
+}
+
+.purchase-card-content h2 {
+  margin: 0 0 8px;
+  font-size: 1.12rem;
+}
+
+.purchase-card-content > p:not(.eyebrow) {
+  margin: 5px 0;
+  color: #596560;
+  line-height: 1.45;
+}
+
+.purchase-card-content .purchase-card-status {
+  color: #32655a;
+  font-weight: 750;
 }
 
 .market-empty {
@@ -1185,7 +1293,8 @@ button:disabled {
   }
 
   .market-header {
-    align-items: flex-start;
+    flex-wrap: wrap;
+    align-items: center;
   }
 
   .market-account {
@@ -1193,6 +1302,15 @@ button:disabled {
     align-items: flex-end;
     gap: 4px;
     font-size: 0.75rem;
+  }
+
+  .market-nav {
+    order: 3;
+    width: 100%;
+  }
+
+  .market-nav button {
+    flex: 1;
   }
 
   .market-account .button-light {
@@ -1233,6 +1351,20 @@ button:disabled {
   .listing-detail-row {
     grid-template-columns: minmax(84px, 0.7fr) minmax(0, 1.3fr);
     gap: 8px;
+  }
+
+  .purchase-request-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .purchase-card {
+    grid-template-columns: 88px minmax(0, 1fr);
+    gap: 12px;
+    padding: 10px;
+  }
+
+  .purchase-card-photo {
+    min-height: 92px;
   }
 
   .wizard-layout {
