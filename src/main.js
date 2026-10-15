@@ -7,12 +7,14 @@ const projectId = import.meta.env.VITE_APPWRITE_PROJECT_ID;
 const functionId = import.meta.env.VITE_APPWRITE_SIGNUP_FUNCTION_ID;
 const databaseId = import.meta.env.VITE_APPWRITE_DATABASE_ID;
 const listingsCollectionId = import.meta.env.VITE_APPWRITE_LISTINGS_COLLECTION_ID;
+const requestsCollectionId = import.meta.env.VITE_APPWRITE_REQUESTS_COLLECTION_ID;
 const photosBucketId = import.meta.env.VITE_APPWRITE_LISTING_PHOTOS_BUCKET_ID;
 const missingMarketplaceConfiguration = [
   ["VITE_APPWRITE_ENDPOINT", endpoint],
   ["VITE_APPWRITE_PROJECT_ID", projectId],
   ["VITE_APPWRITE_DATABASE_ID", databaseId],
   ["VITE_APPWRITE_LISTINGS_COLLECTION_ID", listingsCollectionId],
+  ["VITE_APPWRITE_REQUESTS_COLLECTION_ID", requestsCollectionId],
   ["VITE_APPWRITE_LISTING_PHOTOS_BUCKET_ID", photosBucketId],
 ].filter(([, value]) => !value?.trim()).map(([name]) => name);
 const signup = document.querySelector(".signup");
@@ -41,6 +43,7 @@ const marketplace = createMarketplace({
   storage,
   databaseId,
   collectionId: listingsCollectionId,
+  requestsCollectionId,
   photosBucketId,
   missingConfiguration: missingMarketplaceConfiguration,
   onLogout: logout,

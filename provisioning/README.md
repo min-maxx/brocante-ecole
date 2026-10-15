@@ -4,9 +4,10 @@ Ce répertoire crée et vérifie les ressources dont le marché a besoin :
 
 - la base de données DocumentsDB ;
 - la collection `listings` avec ses attributs et permissions ;
+- la collection `requests` avec ses attributs, son index acheteur et ses permissions privées ;
 - le bucket Storage `listing-photos` avec ses permissions.
 
-Le script ne crée pas la table privée des adresses autorisées ni la fonction d’inscription. Il n’importe aucune donnée familiale. Les ressources existantes sont conservées ; le script ajoute uniquement les attributs facultatifs `subcategory`, `author` et `language` s’ils manquent dans une collection `listings` déjà créée. Si un attribut existant a un schéma incompatible, ou si les permissions attendues manquent, le script s’arrête sans modifier ni supprimer la ressource.
+Le script ne crée pas la table privée des adresses autorisées ni la fonction d’inscription. Il n’importe aucune donnée familiale. Les ressources existantes sont conservées ; le script ajoute les attributs facultatifs attendus qui manquent dans `listings`, dont `sellerId`, et vérifie le schéma et l’index de `requests`. Si un attribut ou les permissions d’une ressource existante ne correspondent pas au schéma attendu, le script s’arrête sans modifier ni supprimer la ressource.
 
 ## Prérequis
 
@@ -30,6 +31,8 @@ Le script ne crée pas la table privée des adresses autorisées ni la fonction 
    | `collections.write` | Créer la collection |
    | `attributes.read` | Vérifier les attributs de la collection existante |
    | `attributes.write` | Créer les attributs de la collection |
+   | `indexes.read` | Vérifier l’index de recherche des demandes |
+   | `indexes.write` | Créer l’index de recherche des demandes |
    | `buckets.read` | Vérifier si le bucket existe déjà |
    | `buckets.write` | Créer le bucket |
 
@@ -58,9 +61,10 @@ Complétez `provisioning/.env` :
 | `APPWRITE_API_KEY` | La clé secrète créée à l’étape précédente |
 | `APPWRITE_DATABASE_ID` | Identifiant à utiliser pour la base du marché |
 | `APPWRITE_LISTINGS_COLLECTION_ID` | Identifiant de la collection ; le modèle propose `listings` |
+| `APPWRITE_REQUESTS_COLLECTION_ID` | Identifiant de la collection des demandes ; le modèle propose `requests` |
 | `APPWRITE_LISTING_PHOTOS_BUCKET_ID` | Identifiant du bucket ; le modèle propose `listing-photos` |
 
-Si la base héberge déjà la table d’adresses autorisées, utilisez exactement le même `APPWRITE_DATABASE_ID` que celui configuré pour la fonction d’inscription. Après le provisionnement, la variable navigateur `VITE_APPWRITE_DATABASE_ID` doit également contenir cet identifiant. Les identifiants de collection et de bucket doivent correspondre à `VITE_APPWRITE_LISTINGS_COLLECTION_ID` et `VITE_APPWRITE_LISTING_PHOTOS_BUCKET_ID` dans `.env.local`.
+Si la base héberge déjà la table d’adresses autorisées, utilisez exactement le même `APPWRITE_DATABASE_ID` que celui configuré pour la fonction d’inscription. Après le provisionnement, la variable navigateur `VITE_APPWRITE_DATABASE_ID` doit également contenir cet identifiant. Les identifiants des collections et du bucket doivent correspondre à `VITE_APPWRITE_LISTINGS_COLLECTION_ID`, `VITE_APPWRITE_REQUESTS_COLLECTION_ID` et `VITE_APPWRITE_LISTING_PHOTOS_BUCKET_ID` dans `.env.local`.
 
 ## Lancer le provisionnement
 
@@ -71,11 +75,11 @@ npm install --prefix provisioning
 npm run setup --prefix provisioning
 ```
 
-Le script crée la base si nécessaire, puis la collection et le bucket. Il peut être relancé : il vérifie les ressources existantes, ajoute les attributs facultatifs attendus qui manquent dans une collection existante (y compris la pointure entière `shoeSize`), et ne recrée pas les ressources déjà conformes. Il échoue explicitement si une collection ou un bucket existe avec un schéma ou des permissions incompatibles ; corrigez alors la configuration Appwrite et relancez-le.
+Le script crée la base si nécessaire, puis les collections `listings` et `requests` et le bucket. Il peut être relancé : il vérifie les ressources existantes, ajoute les attributs facultatifs attendus qui manquent dans `listings` (y compris la pointure entière `shoeSize`), ajoute l’index `by_buyer` si nécessaire et ne recrée pas les ressources déjà conformes. Il échoue explicitement si une collection ou un bucket existe avec un schéma ou des permissions incompatibles ; corrigez alors la configuration Appwrite et relancez-le.
 
 La création de la base, de la collection et du bucket n’est pas une transaction. Si une étape échoue après la création d’une ressource, le script indique l’erreur ; corrigez le problème puis relancez-le pour terminer le provisionnement.
 
-Le provisionnement **ne modifie pas** le fichier `.env.local` de l’application. Après le setup, reportez les identifiants publics vers les variables `VITE_APPWRITE_DATABASE_ID`, `VITE_APPWRITE_LISTINGS_COLLECTION_ID` et `VITE_APPWRITE_LISTING_PHOTOS_BUCKET_ID` dans le `.env.local` à la racine du dépôt. Redémarrez `npm run dev` pour que Vite recharge ces valeurs. Ne copiez jamais `APPWRITE_API_KEY` dans ce fichier.
+Le provisionnement **ne modifie pas** le fichier `.env.local` de l’application. Après le setup, reportez les identifiants publics vers les variables `VITE_APPWRITE_DATABASE_ID`, `VITE_APPWRITE_LISTINGS_COLLECTION_ID`, `VITE_APPWRITE_REQUESTS_COLLECTION_ID` et `VITE_APPWRITE_LISTING_PHOTOS_BUCKET_ID` dans le `.env.local` à la racine du dépôt. Redémarrez `npm run dev` pour que Vite recharge ces valeurs. Ne copiez jamais `APPWRITE_API_KEY` dans ce fichier.
 
 ## Tester sans accès Appwrite
 
