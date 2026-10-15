@@ -15,11 +15,12 @@ export const LISTING_ATTRIBUTES = [
   { key: "shoeSize", type: "integer", required: false },
   { key: "author", type: "string", size: 70, required: false },
   { key: "language", type: "string", size: 40, required: false },
+  { key: "sellerInitials", type: "string", size: 20, required: false },
 ];
 
 const COLLECTION_PERMISSIONS = ['read("users")', 'create("users")'];
 const BUCKET_PERMISSIONS = ['read("users")', 'create("users")'];
-const OPTIONAL_LISTING_ATTRIBUTES = new Set(["subcategory", "shoeSize", "author", "language"]);
+const OPTIONAL_LISTING_ATTRIBUTES = new Set(["subcategory", "shoeSize", "author", "language", "sellerInitials"]);
 
 function isNotFound(error) {
   return error?.code === 404;

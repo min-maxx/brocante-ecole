@@ -22,6 +22,9 @@ function createServices({ existing = {} } = {}) {
     async createCollection(params) {
       calls.push(["createCollection", params]);
     },
+    async createStringAttribute(params) {
+      calls.push(["createStringAttribute", params]);
+    },
   };
   const storage = {
     async getBucket({ bucketId }) {
@@ -100,6 +103,49 @@ test("leaves existing resources untouched when their schema matches", async () =
   });
 
   assert.equal(calls.filter(([name]) => name.startsWith("create")).length, 0);
+});
+
+test("adds the optional seller initials field to an existing collection", async () => {
+  const { calls, databases, storage } = createServices({
+    existing: {
+      database: { $id: "market-db" },
+      collection: {
+        $id: "listings",
+        documentSecurity: true,
+        $permissions: ['read("users")', 'create("users")'],
+        attributes: LISTING_ATTRIBUTES
+          .filter((attribute) => attribute.key !== "sellerInitials")
+          .map((attribute) => ({ ...attribute, status: "available" })),
+      },
+      bucket: {
+        $id: "listing-photos",
+        fileSecurity: true,
+        $permissions: ['read("users")', 'create("users")'],
+      },
+    },
+  });
+
+  await provisionMarketplace({
+    databases,
+    storage,
+    config: {
+      databaseId: "market-db",
+      collectionId: "listings",
+      bucketId: "listing-photos",
+    },
+    log() {},
+  });
+
+  assert.deepEqual(
+    calls.find(([name]) => name === "createStringAttribute"),
+    ["createStringAttribute", {
+      databaseId: "market-db",
+      collectionId: "listings",
+      key: "sellerInitials",
+      size: 20,
+      required: false,
+    }],
+  );
 });
 
 test("stops rather than silently accepting a collection with missing attributes", async () => {

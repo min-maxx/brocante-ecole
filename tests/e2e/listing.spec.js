@@ -148,6 +148,76 @@ async function expectSubcategoryGroups(select, expectedLabels) {
   expect(groups.otherIsLast).toBe(true);
 }
 
+test("a family can open an announcement, browse its photos, and return to the list", async ({ page }) => {
+  const galleryListing = {
+    ...existingListing(),
+    $id: "gallery-listing",
+    title: "Veste imperméable",
+    description: "Doublure propre, fermeture fonctionnelle.",
+    ageGroups: [6],
+    sizes: ["111 à 116 cm"],
+    sellerInitials: "C. M.",
+    photoIds: ["front-photo", "label-photo", "detail-photo"],
+  };
+  const singlePhotoListing = {
+    ...existingListing(),
+    $id: "single-photo-listing",
+    title: "Livre illustré",
+    description: "Album en très bon état.",
+    category: "Livres",
+    condition: "Neuf",
+    ageGroups: [8],
+    subcategory: "Albums",
+    sizes: [],
+    color: "",
+    brand: "",
+    author: "Claude Ponti",
+    language: "Français",
+    sellerInitials: "A. B.",
+    photoIds: ["book-cover"],
+  };
+  await installMarketplaceApi(page, [galleryListing, singlePhotoListing]);
+
+  await page.goto("/");
+  await page.getByRole("link", { name: "Consulter l’annonce : Veste imperméable" }).click();
+
+  const detail = page.locator(".listing-detail");
+  const gallery = detail.locator(".listing-detail-gallery");
+  await expect(page.getByRole("heading", { name: "Veste imperméable" })).toBeVisible();
+  await expect(detail.locator(".listing-detail-seller")).toContainText("C. M.");
+  await expect(detail.locator(".listing-detail-row").nth(1)).toContainText("Pull · Kiabi · Rouge");
+  await expect(detail.locator(".listing-detail-age")).toHaveCount(1);
+  await expect(detail.locator(".listing-detail-age dd")).toHaveText("6 ans · 111–116 cm");
+  await expect(gallery.locator(".listing-gallery-count")).toHaveText("1 / 3");
+  await expect(gallery.locator(".listing-gallery-thumbnails button")).toHaveCount(3);
+  await expect(gallery.locator(".listing-gallery-main img")).toHaveAttribute("alt", "Photo 1 sur 3 de Veste imperméable");
+
+  await gallery.getByRole("button", { name: "Photo suivante" }).click();
+  await expect(gallery.locator(".listing-gallery-count")).toHaveText("2 / 3");
+  await gallery.getByRole("button", { name: "Afficher la photo 3" }).click();
+  await expect(gallery.locator(".listing-gallery-main img")).toHaveAttribute("alt", "Photo 3 sur 3 de Veste imperméable");
+  await gallery.getByRole("button", { name: "Photo suivante" }).click();
+  await expect(gallery.locator(".listing-gallery-count")).toHaveText("1 / 3");
+  await gallery.getByRole("button", { name: "Photo précédente" }).click();
+  await expect(gallery.locator(".listing-gallery-count")).toHaveText("3 / 3");
+
+  await page.getByRole("button", { name: "Retour aux annonces" }).click();
+  await expect(page.getByRole("heading", { name: "Les annonces du marché" })).toBeVisible();
+  await page.getByRole("link", { name: "Consulter l’annonce : Livre illustré" }).click();
+
+  const singlePhotoDetail = page.locator(".listing-detail");
+  const singlePhotoGallery = singlePhotoDetail.locator(".listing-detail-gallery");
+  await expect(singlePhotoDetail.locator(".listing-detail-seller")).toContainText("A. B.");
+  await expect(singlePhotoDetail.locator(".listing-detail-age dd")).toHaveText("8 ans");
+  await expect(singlePhotoGallery.locator(".listing-gallery-count")).toHaveText("1 / 1");
+  await expect(singlePhotoGallery.locator(".listing-gallery-main img")).toHaveAttribute("alt", "Photo 1 sur 1 de Livre illustré");
+  await expect(singlePhotoGallery.getByRole("button", { name: "Photo suivante" })).toHaveCount(0);
+  await expect(singlePhotoGallery.locator(".listing-gallery-thumbnails button")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Retour aux annonces" }).click();
+  await expect(page.getByRole("heading", { name: "Les annonces du marché" })).toBeVisible();
+});
+
 test("listing cards show category and condition as footer tags", async ({ page }) => {
   const categories = ["Vêtements", "Livres", "Jeux et jouets", "Matériel scolaire"];
   const listings = categories.map((category, index) => ({
@@ -204,7 +274,7 @@ test("a family publishes a clothing listing and sees it in the uniform listing g
     const path = url.pathname;
 
     if (path.endsWith("/account") && request.method() === "GET") {
-      await route.fulfill({ json: { $id: "family-1", name: "Famille Test", email: "famille@example.test" } });
+      await route.fulfill({ json: { $id: "family-1", name: "Famille Test", email: "camille.martin@example.test" } });
       return;
     }
 
@@ -347,6 +417,8 @@ test("a family publishes a clothing listing and sees it in the uniform listing g
     );
     return new Set(heights).size;
   }).toBe(1);
+  await clothingCard.click();
+  await expect(page.locator(".listing-detail-seller strong")).toHaveText("C. M.");
 });
 
 test("a family sees age-based EU footwear sizes for shoes", async ({ page }) => {
