@@ -236,6 +236,14 @@ function getListingPhotoUrl(storage, bucketId, fileId) {
   return String(storage.getFileView(bucketId, fileId));
 }
 
+function sellerInitialsFromEmail(email) {
+  const localPart = email.split("@", 1)[0].split("+", 1)[0];
+  const nameParts = localPart.match(/[\p{L}\p{N}]+/gu) || [];
+  return nameParts.slice(0, 2)
+    .map((part) => `${Array.from(part)[0].toLocaleUpperCase("fr")}.`)
+    .join(" ");
+}
+
 function ownerPermissions(userId) {
   return [
     Permission.read(Role.users()),
@@ -257,6 +265,8 @@ export function createMarketplace({
   let user = null;
   let listings = [];
   let view = "list";
+  let selectedListingId = "";
+  let detailPhotoIndex = 0;
   let step = 1;
   let draft = emptyDraft();
   let message = "";
@@ -347,7 +357,7 @@ export function createMarketplace({
     const details = listingDetails(listing);
     const itemDetailsMarkup = details.item.map(escapeHtml).join(" · ");
 
-    return `<article class="listing-card">
+    return `<a class="listing-card" href="#listing-${escapeHtml(listing.$id)}" data-action="open-listing" data-listing-id="${escapeHtml(listing.$id)}" aria-label="Consulter l’annonce : ${escapeHtml(listing.title)}">
       <div class="listing-photo">${photoMarkup}</div>
       <div class="listing-card-content">
         <p class="listing-price">${escapeHtml(priceLabel(listing.price))}</p>
@@ -359,7 +369,7 @@ export function createMarketplace({
           <span class="listing-card-tag listing-condition-tag">${escapeHtml(conditionLabel(listing.condition))}</span>
         </div>
       </div>
-    </article>`;
+    </a>`;
   }
 
   function listMarkup() {
@@ -380,6 +390,69 @@ export function createMarketplace({
       </div>
       ${message ? `<p class="market-message" data-kind="${escapeHtml(messageKind)}" role="${["error", "configuration"].includes(messageKind) ? "alert" : "status"}">${escapeHtml(message)}${messageKind === "error" && !loading ? `<button class="text-button" type="button" data-action="retry-list">Réessayer</button>` : ""}</p>` : ""}
       ${content}
+    </main>`;
+  }
+
+  function listingDetailMarkup() {
+    const listing = listings.find((item) => item.$id === selectedListingId);
+    if (!listing) {
+      return `<main class="market-main">
+        <button class="button-light listing-detail-back" type="button" data-action="back-to-list">← Retour aux annonces</button>
+        <section class="market-empty"><h2>Cette annonce n’est plus disponible.</h2></section>
+      </main>`;
+    }
+
+    const photoIds = Array.isArray(listing.photoIds) ? listing.photoIds.slice(0, MAX_PHOTOS) : [];
+    const photoIndex = photoIds.length ? Math.min(detailPhotoIndex, photoIds.length - 1) : 0;
+    const photoId = photoIds[photoIndex];
+    const photoMarkup = photoId
+      ? `<img src="${escapeHtml(getListingPhotoUrl(storage, photosBucketId, photoId))}" alt="Photo ${photoIndex + 1} sur ${photoIds.length} de ${escapeHtml(listing.title)}">`
+      : `<div class="listing-gallery-placeholder" aria-hidden="true">${escapeHtml(CATEGORY_DETAILS[listing.category]?.icon || "📦")}</div>`;
+    const counterMarkup = photoIds.length
+      ? `<span class="listing-gallery-count" aria-live="polite">${photoIndex + 1} / ${photoIds.length}</span>`
+      : "";
+    const navigationMarkup = photoIds.length > 1
+      ? `<button class="listing-gallery-nav previous" type="button" data-action="gallery-previous" aria-label="Photo précédente">‹</button>
+        <button class="listing-gallery-nav next" type="button" data-action="gallery-next" aria-label="Photo suivante">›</button>`
+      : "";
+    const thumbnailsMarkup = photoIds.length > 1
+      ? `<div class="listing-gallery-thumbnails" aria-label="Choisir une photo">${photoIds.map((id, index) =>
+        `<button type="button" data-action="select-detail-photo" data-photo-index="${index}" aria-label="Afficher la photo ${index + 1}" aria-pressed="${index === photoIndex}">
+          <img src="${escapeHtml(getListingPhotoUrl(storage, photosBucketId, id))}" alt="">
+        </button>`
+      ).join("")}</div>`
+      : "";
+    const details = listingDetails(listing);
+    const sellerInitials = listing.sellerInitials || "";
+    const sellerLabel = sellerInitials || "Famille";
+    const rows = [
+      ["Catégorie", listing.category],
+      ["Type et caractéristiques", details.item.join(" · ")],
+      ["État", conditionLabel(listing.condition)],
+      ["Âge", details.ages.join(" · ")],
+    ].filter(([, value]) => value);
+
+    return `<main class="market-main">
+      <button class="button-light listing-detail-back" type="button" data-action="back-to-list">← Retour aux annonces</button>
+      <article class="listing-detail">
+        <section class="listing-detail-gallery" aria-label="Galerie de photos">
+          <div class="listing-gallery-main">
+            ${photoMarkup}
+            ${navigationMarkup}
+            ${counterMarkup}
+          </div>
+          ${thumbnailsMarkup}
+        </section>
+        <div class="listing-detail-content">
+          <p class="listing-detail-seller">Proposé par <strong>${escapeHtml(sellerLabel)}</strong></p>
+          <h1>${escapeHtml(listing.title)}</h1>
+          <p class="listing-price">${escapeHtml(priceLabel(listing.price))}</p>
+          <dl class="listing-detail-rows">${rows.map(([label, value]) =>
+            `<div class="listing-detail-row${label === "Âge" ? " listing-detail-age" : ""}"><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`
+          ).join("")}</dl>
+          <p class="listing-detail-description">${escapeHtml(listing.description || "Aucune description ajoutée.")}</p>
+        </div>
+      </article>
     </main>`;
   }
 
@@ -560,7 +633,10 @@ export function createMarketplace({
   }
 
   function render() {
-    root.innerHTML = `<div class="market-app">${headerMarkup()}${view === "wizard" ? wizardMarkup() : listMarkup()}</div>`;
+    const content = view === "wizard" ? wizardMarkup()
+      : view === "detail" ? listingDetailMarkup()
+        : listMarkup();
+    root.innerHTML = `<div class="market-app">${headerMarkup()}${content}</div>`;
   }
 
   function updateFootwearSizeOptions() {
@@ -700,6 +776,7 @@ export function createMarketplace({
         author: draft.author.trim(),
         language: draft.language.trim(),
         price: Number(draft.price),
+        sellerInitials: sellerInitialsFromEmail(user.email),
         photoIds: uploadedFileIds,
       };
       const listing = await databases.createDocument(
@@ -725,9 +802,44 @@ export function createMarketplace({
   }
 
   async function handleClick(event) {
-    const button = event.target.closest("button[data-action]");
+    const button = event.target.closest("button[data-action], a[data-action]");
     if (!button) return;
     switch (button.dataset.action) {
+      case "open-listing":
+        event.preventDefault();
+        if (!listings.some((listing) => listing.$id === button.dataset.listingId)) return;
+        selectedListingId = button.dataset.listingId;
+        detailPhotoIndex = 0;
+        view = "detail";
+        message = "";
+        render();
+        break;
+      case "back-to-list":
+        selectedListingId = "";
+        detailPhotoIndex = 0;
+        view = "list";
+        message = "";
+        render();
+        break;
+      case "gallery-previous":
+      case "gallery-next": {
+        const listing = listings.find((item) => item.$id === selectedListingId);
+        const photoCount = Array.isArray(listing?.photoIds) ? Math.min(listing.photoIds.length, MAX_PHOTOS) : 0;
+        if (photoCount < 2) return;
+        const direction = button.dataset.action === "gallery-next" ? 1 : -1;
+        detailPhotoIndex = (detailPhotoIndex + direction + photoCount) % photoCount;
+        render();
+        break;
+      }
+      case "select-detail-photo": {
+        const listing = listings.find((item) => item.$id === selectedListingId);
+        const photoCount = Array.isArray(listing?.photoIds) ? Math.min(listing.photoIds.length, MAX_PHOTOS) : 0;
+        const photoIndex = Number(button.dataset.photoIndex);
+        if (!Number.isInteger(photoIndex) || photoIndex < 0 || photoIndex >= photoCount) return;
+        detailPhotoIndex = photoIndex;
+        render();
+        break;
+      }
       case "new-listing":
         resetDraft();
         message = "";
