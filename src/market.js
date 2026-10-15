@@ -273,6 +273,9 @@ export function createMarketplace({
   let messageKind = "info";
   let loading = false;
   let publishing = false;
+  let selectedCategory = "";
+  let selectedConditions = [];
+  let selectedItemFilters = {};
 
   const configReady = missingConfiguration.length === 0
     && Boolean(databases && storage && databaseId && collectionId && photosBucketId);
@@ -372,16 +375,155 @@ export function createMarketplace({
     </a>`;
   }
 
+  function uniqueListingValues(categoryListings, key) {
+    return [...new Set(categoryListings
+      .map((listing) => listing[key])
+      .filter((value) => typeof value === "string" && value.trim()))]
+      .sort((left, right) => left.localeCompare(right, "fr"));
+  }
+
+  function ageFilterOptions(categoryListings) {
+    const ages = [...new Set(categoryListings.flatMap((listing) =>
+      Array.isArray(listing.ageGroups) ? listing.ageGroups.map(Number) : []
+    ))]
+      .filter((age) => Number.isInteger(age) && AGE_SIZES[age])
+      .sort((left, right) => left - right);
+
+    return ages.map((age) => {
+      let detail = "";
+      if (selectedCategory === "Vêtements") {
+        const sizes = new Set(categoryListings
+          .filter((listing) => Array.isArray(listing.ageGroups) && listing.ageGroups.some((listingAge) => Number(listingAge) === age))
+          .flatMap((listing) => sizesForSubcategory(listing.subcategory, [age])));
+        detail = [...sizes].join(" / ") || AGE_SIZES[age];
+      } else if (selectedCategory === "Matériel scolaire") {
+        detail = schoolLevelsForAges([age]).join(" / ");
+      }
+      return {
+        value: String(age),
+        label: `${age} ans${detail ? ` · ${detail}` : ""}`,
+      };
+    });
+  }
+
+  function categoryFilterSpecs(categoryListings) {
+    const specs = [{
+      key: "subcategory",
+      label: "Type / genre",
+      options: uniqueListingValues(categoryListings, "subcategory").map((value) => ({ value, label: value })),
+    }];
+
+    if (selectedCategory === "Vêtements" || selectedCategory === "Jeux et jouets" || selectedCategory === "Matériel scolaire") {
+      specs.push({
+        key: "brand",
+        label: "Marque",
+        options: uniqueListingValues(categoryListings, "brand").map((value) => ({ value, label: value })),
+      });
+    }
+    if (selectedCategory === "Livres") {
+      specs.push({
+        key: "author",
+        label: "Auteur / autrice",
+        options: uniqueListingValues(categoryListings, "author").map((value) => ({ value, label: value })),
+      }, {
+        key: "language",
+        label: "Langue",
+        options: uniqueListingValues(categoryListings, "language").map((value) => ({ value, label: value })),
+      });
+    }
+
+    specs.push({
+      key: "ageGroup",
+      label: selectedCategory === "Vêtements"
+        ? "Âge – taille"
+        : selectedCategory === "Matériel scolaire"
+          ? "Âge – classe"
+          : "Âge",
+      options: ageFilterOptions(categoryListings),
+    });
+    return specs;
+  }
+
+  function filterSelectMarkup({ key, label, options }) {
+    return `<label class="listing-filter" for="listing-filter-${escapeHtml(key)}">
+      <span>${escapeHtml(label)}</span>
+      <select id="listing-filter-${escapeHtml(key)}" data-item-filter="${escapeHtml(key)}"${options.length ? "" : " disabled"}>
+        <option value="">Tous</option>
+        ${options.map(({ value, label: optionLabel }) =>
+          `<option value="${escapeHtml(value)}"${selectedItemFilters[key] === value ? " selected" : ""}>${escapeHtml(optionLabel)}</option>`
+        ).join("")}
+      </select>
+    </label>`;
+  }
+
+  function listingFiltersMarkup() {
+    const categoryListings = selectedCategory
+      ? listings.filter((listing) => listing.category === selectedCategory)
+      : [];
+    const categoryOptions = Object.keys(CATEGORY_DETAILS).map((category) =>
+      `<option value="${escapeHtml(category)}"${selectedCategory === category ? " selected" : ""}>${escapeHtml(category)}</option>`
+    ).join("");
+    const categoryFilters = selectedCategory
+      ? categoryFilterSpecs(categoryListings).map(filterSelectMarkup).join("")
+      : "";
+
+    return `<section class="listing-filters" aria-labelledby="listing-filter-heading">
+      <div class="listing-filters-header">
+        <h2 id="listing-filter-heading">Filtrer les annonces</h2>
+        <button class="text-button" type="button" data-action="reset-filters">Tout effacer</button>
+      </div>
+      <div class="listing-filter-grid">
+        <label class="listing-filter" for="listing-filter-category">
+          <span>Catégorie</span>
+          <select id="listing-filter-category" data-listing-filter="category">
+            <option value=""${selectedCategory ? "" : " selected"}>Toutes les catégories</option>
+            ${categoryOptions}
+          </select>
+        </label>
+        <fieldset class="listing-condition-filter">
+          <legend>État de l’objet</legend>
+          <div class="listing-condition-options">${CONDITIONS.map((condition, index) =>
+            `<label class="listing-condition-option" for="listing-condition-${index}">
+              <input id="listing-condition-${index}" type="checkbox" data-condition-filter="${escapeHtml(condition)}"${selectedConditions.includes(condition) ? " checked" : ""}>
+              <span>${escapeHtml(condition)}</span>
+            </label>`
+          ).join("")}</div>
+        </fieldset>
+        ${categoryFilters}
+      </div>
+    </section>`;
+  }
+
+  function matchesListingFilters(listing) {
+    if (selectedCategory && listing.category !== selectedCategory) return false;
+    if (selectedConditions.length && !selectedConditions.includes(listing.condition)) return false;
+    return Object.entries(selectedItemFilters).every(([key, value]) => {
+      if (!value) return true;
+      if (key === "ageGroup") {
+        return Array.isArray(listing.ageGroups) && listing.ageGroups.some((age) => Number(age) === Number(value));
+      }
+      return listing[key] === value;
+    });
+  }
+
   function listMarkup() {
+    const matchingListings = listings.filter(matchesListingFilters);
     const content = loading
       ? `<p class="market-empty" role="status">Chargement des annonces…</p>`
-      : listings.length
-        ? `<div class="listing-grid">${listings.map(listingCardMarkup).join("")}</div>`
-        : `<section class="market-empty">
+      : !listings.length
+        ? `<section class="market-empty">
             <p class="market-empty-icon" aria-hidden="true">👕</p>
             <h2>Aucune annonce pour le moment</h2>
           <p>Déposez la première annonce du marché.</p>
+          </section>`
+      : matchingListings.length
+        ? `<div class="listing-grid">${matchingListings.map(listingCardMarkup).join("")}</div>`
+        : `<section class="market-empty" role="status">
+            <h2>Aucune annonce ne correspond à ces filtres</h2>
+            <p>Modifiez vos critères ou effacez les filtres pour retrouver toutes les annonces.</p>
+            <button class="button-light" type="button" data-action="reset-filters">Tout effacer</button>
           </section>`;
+    const resultCount = loading ? "" : `<p class="listing-result-count" role="status" aria-live="polite">${matchingListings.length} annonce${matchingListings.length === 1 ? "" : "s"}</p>`;
 
     return `<main class="market-main">
       <div class="market-heading">
@@ -389,6 +531,8 @@ export function createMarketplace({
         <button class="button-primary" type="button" data-action="new-listing">Déposer une annonce</button>
       </div>
       ${message ? `<p class="market-message" data-kind="${escapeHtml(messageKind)}" role="${["error", "configuration"].includes(messageKind) ? "alert" : "status"}">${escapeHtml(message)}${messageKind === "error" && !loading ? `<button class="text-button" type="button" data-action="retry-list">Réessayer</button>` : ""}</p>` : ""}
+      ${listingFiltersMarkup()}
+      ${resultCount}
       ${content}
     </main>`;
   }
@@ -911,6 +1055,12 @@ export function createMarketplace({
         message = "";
         await loadListings();
         break;
+      case "reset-filters":
+        selectedCategory = "";
+        selectedConditions = [];
+        selectedItemFilters = {};
+        render();
+        break;
       case "logout":
         await onLogout();
         break;
@@ -985,6 +1135,27 @@ export function createMarketplace({
 
   root.addEventListener("change", (event) => {
     const target = event.target;
+    if (target instanceof HTMLSelectElement && (target.dataset.listingFilter || target.dataset.itemFilter)) {
+      if (target.dataset.listingFilter === "category") {
+        selectedCategory = target.value;
+        selectedItemFilters = {};
+      } else if (target.dataset.itemFilter) {
+        if (target.value) selectedItemFilters[target.dataset.itemFilter] = target.value;
+        else delete selectedItemFilters[target.dataset.itemFilter];
+      }
+      render();
+      if (target.id) root.querySelector(`#${target.id}`)?.focus();
+      return;
+    }
+    if (target instanceof HTMLInputElement && target.dataset.conditionFilter !== undefined) {
+      const condition = target.dataset.conditionFilter;
+      selectedConditions = target.checked
+        ? [...new Set([...selectedConditions, condition])]
+        : selectedConditions.filter((selected) => selected !== condition);
+      render();
+      if (target.id) root.querySelector(`#${target.id}`)?.focus();
+      return;
+    }
     if (target instanceof HTMLInputElement && target.name === "ageGroup") {
       draft.ageGroups = [...root.querySelectorAll('input[name="ageGroup"]:checked')]
         .map((input) => Number(input.value))
@@ -1032,6 +1203,9 @@ export function createMarketplace({
     async open(activeUser, initialMessage = "") {
       user = activeUser;
       view = "list";
+      selectedCategory = "";
+      selectedConditions = [];
+      selectedItemFilters = {};
       message = initialMessage;
       messageKind = "success";
       render();
