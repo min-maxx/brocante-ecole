@@ -169,7 +169,7 @@ Le formulaire envoie toujours `description` et `brand`. Si leur valeur est facul
 | `amount` | Entier (0 pour une demande de don) | Oui |
 | `status` | Chaîne, 20 caractères (`pending`, `accepted` ou `rejected`) | Oui |
 
-La collection des demandes autorise uniquement la création par les familles connectées; chaque document n’est lisible que par l’acheteur et le vendeur et seul le vendeur peut le mettre à jour. L’index `by_buyer` permet de retrouver les demandes de l’acheteur connecté.
+La collection des demandes autorise uniquement la création par les familles connectées; chaque document est lisible uniquement par l’acheteur qui l’a créé. `sellerId` est conservé pour associer ultérieurement la demande au vendeur. L’index `by_buyer` permet de retrouver les demandes de l’acheteur connecté.
 
 Pour les livres, la langue se choisit parmi Français, Anglais, Espagnol, Allemand, Italien, Bilingue et Autre. Le choix « Autre » requiert une précision dans la description.
 

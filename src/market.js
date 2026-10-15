@@ -258,12 +258,8 @@ function listingSellerId(listing) {
   return permission?.match(/^update\("user:([^"]+)"\)$/)?.[1] || "";
 }
 
-function purchaseRequestPermissions(buyerId, sellerId) {
-  return [
-    Permission.read(Role.user(buyerId)),
-    Permission.read(Role.user(sellerId)),
-    Permission.update(Role.user(sellerId)),
-  ];
+function purchaseRequestPermissions(buyerId) {
+  return [Permission.read(Role.user(buyerId))];
 }
 
 export function createMarketplace({
@@ -1026,7 +1022,7 @@ export function createMarketplace({
           amount,
           status: "pending",
         },
-        purchaseRequestPermissions(user.$id, sellerId),
+        purchaseRequestPermissions(user.$id),
       );
       purchaseRequests = [request, ...purchaseRequests.filter((item) => item.$id !== request.$id)];
       view = "purchases";
