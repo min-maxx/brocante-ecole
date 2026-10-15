@@ -77,6 +77,28 @@ async function installMarketplaceApi(page, initialListings = []) {
     if (path.includes("/databases/") && path.endsWith("/documents") && request.method() === "POST") {
       const { data, permissions = [] } = request.postDataJSON();
       if (collectionId === "e2e-requests") {
+        const allowedPermissionRoles = new Set([
+          "any",
+          "users",
+          "user:family-1",
+          "user:family-1/verified",
+          "users/verified",
+        ]);
+        const rejectedPermission = permissions.find((permission) => {
+          const role = permission.match(/\("([^"]+)"\)$/)?.[1];
+          return !allowedPermissionRoles.has(role);
+        });
+        if (rejectedPermission) {
+          await route.fulfill({
+            status: 401,
+            json: {
+              code: 401,
+              type: "user_unauthorized",
+              message: "Permissions must be one of: (any, users, user:family-1, user:family-1/verified, users/verified)",
+            },
+          });
+          return;
+        }
         const purchaseRequest = {
           ...data,
           $id: `request-${requests.length + 1}`,
@@ -264,9 +286,7 @@ test("a family can send a prefilled offer and find its pending status in purchas
     amount: 3,
     status: "pending",
   });
-  expect(createdRequests[0].$permissions).toContain('read("user:family-1")');
-  expect(createdRequests[0].$permissions).toContain('read("user:seller-2")');
-  expect(createdRequests[0].$permissions).toContain('update("user:seller-2")');
+  expect(createdRequests[0].$permissions).toEqual(['read("user:family-1")']);
 
   await page.reload();
   await page.getByRole("button", { name: "Mes achats" }).click();
