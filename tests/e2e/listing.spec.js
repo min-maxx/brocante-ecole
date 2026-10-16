@@ -405,7 +405,8 @@ test("buyer and seller can exchange persistent messages in an offer conversation
   await page.getByRole("button", { name: "Envoyer une offre" }).click();
 
   await expect(page.getByRole("heading", { name: "Conversation avec S. V." })).toBeVisible();
-  await expect(page.locator(".conversation-events").getByText("3 € proposés")).toBeVisible();
+  await expect(page.locator(".conversation-events .conversation-offer.mine")).toContainText("Offre : 3 €");
+  await expect(page.locator(".conversation-listing-preview")).toContainText("4 € · Bon état");
   await expect(page.getByText("Bonjour, le pull est-il toujours disponible ?")).toBeVisible();
 
   api.setCurrentUserId("seller-2");
@@ -427,6 +428,43 @@ test("buyer and seller can exchange persistent messages in an offer conversation
     "Bonjour, le pull est-il toujours disponible ?",
     "Oui, il est disponible.",
   ]);
+});
+
+test("offer message aligns with its author in both views", async ({ page }) => {
+  const api = await installMarketplaceApi(page, [existingListing()]);
+
+  await page.goto("/");
+  await page.getByRole("link", { name: "Consulter l’annonce : Pull en laine" }).click();
+  await page.getByRole("spinbutton", { name: "Votre offre" }).fill("3");
+  await page.getByRole("button", { name: "Envoyer une offre" }).click();
+
+  const buyerOffer = page.locator(".conversation-events .conversation-offer.mine");
+  await expect(buyerOffer).toContainText("Offre : 3 €");
+  await expect(buyerOffer).toContainText("En attente");
+  await expect(buyerOffer).toHaveCSS("justify-self", "end");
+
+  api.setCurrentUserId("seller-2");
+  await page.reload();
+  await page.getByRole("button", { name: "Mes ventes" }).click();
+  await page.getByRole("button", { name: /Pull en laine/ }).click();
+  const sellerOffer = page.locator(".conversation-events .conversation-offer").filter({ hasText: "Offre : 3 €" });
+  await expect(sellerOffer).toHaveCSS("justify-self", "start");
+});
+
+test("offer conversation links back to its announcement", async ({ page }) => {
+  await installMarketplaceApi(page, [existingListing()]);
+
+  await page.goto("/");
+  await page.getByRole("link", { name: "Consulter l’annonce : Pull en laine" }).click();
+  await page.getByRole("spinbutton", { name: "Votre offre" }).fill("3");
+  await page.getByRole("button", { name: "Envoyer une offre" }).click();
+
+  await expect(page.getByRole("heading", { name: "Conversation avec S. V." })).toBeVisible();
+  await expect(page.locator(".conversation-listing-preview")).toContainText("4 € · Bon état");
+  const listingLink = page.getByRole("button", { name: "Voir l’annonce : Pull en laine" });
+  await expect(listingLink).toBeVisible();
+  await listingLink.click();
+  await expect(page.getByRole("heading", { name: "Pull en laine" })).toBeVisible();
 });
 
 test("a free listing sends a donation request instead of an offer", async ({ page }) => {
