@@ -50,9 +50,9 @@ Le navigateur envoie l’adresse à une Appwrite Function publique. Après ouver
 <a id="configuration-appwrite"></a>
 ## ⚙️ Configurer Appwrite
 
-### 1. Créer le projet et enregistrer les plateformes Web
+### 1. Créer le projet
 
-Créez un projet Appwrite Cloud dans la région Frankfurt (`fra`). Dans la console, ouvrez **Overview → Integrations → Add platform → Web App**. Dans le champ **Hostname**, ajoutez le domaine de production et `localhost` pour le développement. Saisissez le hostname sans `https://`, sans port et sans chemin, par exemple `brocante-esmj.appwrite.network` et `localhost`.
+Créez un projet Appwrite Cloud dans la région Frankfurt (`fra`). Le provisionnement enregistre automatiquement comme plateformes Web le hostname de `APPWRITE_SIGNUP_CALLBACK_URL` et `localhost`.
 
 ### 2. Configurer les méthodes de connexion
 
@@ -69,60 +69,21 @@ Créez une base de données et une table privée pour les adresses autorisées :
 
 > Ne placez jamais d’adresses de familles dans le code source ni dans ce dépôt.
 
-### 4. Déployer la fonction de création de compte
+### 4. Provisionner les Functions Appwrite
 
-Créez une fonction **Node.js 22** nommée `create-family-account`, avec cette configuration :
+Le script `npm run setup --prefix provisioning` crée et déploie automatiquement `create-family-account` et `market-conversations`. Il configure aussi leurs permissions d’exécution, leurs portées serveur, leurs variables et les plateformes Web nécessaires. Il attend que chaque déploiement soit actif.
 
-| Réglage | Valeur |
-| --- | --- |
-| Répertoire racine | `functions/create-family-account` |
-| Point d’entrée | `src/main.js` |
-| Commande de construction | `npm install` |
-
-Dans **Functions → `create-family-account` → Security → Permissions**, autorisez **All guests** afin que les visiteurs non connectés puissent appeler la fonction. Elle vérifie elle-même l’autorisation pour chaque action. **Après toute modification de cette permission, redéployez la fonction** pour appliquer le changement au déploiement actif.
-
-### 5. Limiter les portées et configurer la fonction
-
-Limitez les portées de la clé éphémère aux permissions suivantes :
-
-| Portée | Utilisation |
-| --- | --- |
-| `rows.read` | Lire les lignes de la liste d’adresses autorisées |
-| `users.read` | Vérifier les comptes |
-| `users.write` | Créer et mettre à jour les comptes |
-
-Configurez ces variables dans la fonction :
-
-| Variable | Description |
-| --- | --- |
-| `APPWRITE_DATABASE_ID` | Identifiant de la base de données |
-| `APPWRITE_ALLOWLIST_TABLE_ID` | Identifiant de la table privée des adresses autorisées |
-| `APPWRITE_SIGNUP_CALLBACK_URL` | URL complète du site de retour, par exemple `https://brocante-esmj.appwrite.network/` |
-| `APPWRITE_FUNCTION_API_ENDPOINT` | Fournie par Appwrite |
-| `APPWRITE_FUNCTION_PROJECT_ID` | Fournie par Appwrite |
-| `APPWRITE_FUNCTION_API_KEY` | Fournie par Appwrite |
-
-Le hostname de `APPWRITE_SIGNUP_CALLBACK_URL` (par exemple `brocante-esmj.appwrite.network`) doit être enregistré comme plateforme Web à l’étape 1 **dans le même projet Appwrite que la fonction**. Sans cela, Appwrite rejettera le lien de vérification.
+Pour `create-family-account`, le script reprend `APPWRITE_ALLOWLIST_TABLE_ID` et `APPWRITE_SIGNUP_CALLBACK_URL` depuis la Function déjà présente si ces valeurs ne sont pas renseignées dans `provisioning/.env`. Pour une première installation, ajoutez-les à ce fichier. La table privée des adresses autorisées et ses données restent gérées séparément.
 
 <a id="conversations-marche"></a>
 ## 💬 Échanger dans une conversation
 
-Créez une fonction **Node.js 22** nommée `market-conversations` :
-
-| Réglage | Valeur |
-| --- | --- |
-| Répertoire racine | `functions/market-conversations` |
-| Point d’entrée | `src/main.js` |
-| Commande de construction | `npm install` |
-
-Dans **Security → Permissions**, autorisez uniquement **Users** à exécuter cette fonction. N’autorisez pas les invités : la fonction s’appuie sur l’identité Appwrite authentifiée (`x-appwrite-user-id`). Limitez sa clé éphémère aux portées `databases.read`, `documents.read`, `documents.write` et `users.read`.
-
-Configurez les variables `APPWRITE_DATABASE_ID`, `APPWRITE_LISTINGS_COLLECTION_ID`, `APPWRITE_REQUESTS_COLLECTION_ID` et `APPWRITE_MESSAGES_COLLECTION_ID` dans la fonction. La fonction vérifie l’annonce et l’identité de l’appelant, crée les demandes et les messages avec des droits de lecture accordés uniquement à l’acheteur et au vendeur de la conversation. Les familles ne peuvent pas s’ajouter elles-mêmes aux ACL depuis le navigateur.
+`market-conversations` est réservé aux utilisateurs connectés. Le provisionnement configure ses portées serveur (`databases.read`, `documents.read`, `documents.write`, `users.read`) et les variables Appwrite nécessaires. La Function vérifie l’annonce et l’identité de l’appelant, puis crée les demandes et messages avec un accès de lecture réservé aux deux familles participantes.
 
 <a id="configuration-annonces-photos"></a>
 ## 🗂️ Provisionner les annonces, les demandes, les conversations et les photos
 
-Les ressources du marché se créent depuis le répertoire isolé [`provisioning/`](./provisioning/), à l’écart du code de l’application. Le script utilise le Server SDK Appwrite, crée les ressources manquantes et ajoute les attributs facultatifs attendus aux collections existantes. Il migre également l’ancienne permission de création de `requests` vers une collection sans permission générale, sans modifier les ACL des documents existants. Si le schéma ou les permissions d’une autre ressource sont incompatibles, il s’arrête explicitement. Consultez le [guide détaillé du provisionnement](./provisioning/README.md).
+Les ressources du marché et ses deux Functions se provisionnent depuis le répertoire isolé [`provisioning/`](./provisioning/), à l’écart du code de l’application. Le script utilise le Server SDK Appwrite, crée les ressources manquantes, ajoute les attributs facultatifs attendus et déploie les sources présentes dans `functions/`. Il migre également l’ancienne permission de création de `requests` vers une collection sans permission générale, sans modifier les ACL des documents existants. Si le schéma ou les permissions d’une autre ressource sont incompatibles, il s’arrête explicitement. Consultez le [guide détaillé du provisionnement](./provisioning/README.md).
 
 ```sh
 cp provisioning/.env.example provisioning/.env
@@ -131,7 +92,7 @@ npm install --prefix provisioning
 npm run setup --prefix provisioning
 ```
 
-`provisioning/.env` est ignoré par Git. Créez une clé API Appwrite temporaire avec les portées de lecture et d’écriture nécessaires sur les bases, collections, attributs et buckets ; ne mettez jamais cette clé dans `.env.local`, dans une variable `VITE_` ou dans le dépôt.
+`provisioning/.env` est ignoré par Git. Créez une clé API Appwrite temporaire avec les portées de lecture/écriture sur les bases, collections, attributs, index et buckets, ainsi que `functions.read`, `functions.write`, `project.read` et `project.write`. Ce sont les seuls droits Appwrite à ajouter manuellement. Le script configure les droits d’exécution et les portées serveur des deux Functions. Ne mettez jamais cette clé dans `.env.local`, dans une variable `VITE_` ou dans le dépôt.
 
 | Variable | Valeur |
 | --- | --- |
