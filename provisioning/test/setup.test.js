@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { LISTING_ATTRIBUTES, PURCHASE_REQUEST_ATTRIBUTES, provisionMarketplace } from "../src/setup.js";
+import {
+  CONVERSATION_MESSAGE_ATTRIBUTES,
+  LISTING_ATTRIBUTES,
+  PURCHASE_REQUEST_ATTRIBUTES,
+  provisionMarketplace,
+} from "../src/setup.js";
 
 function createServices({ existing = {} } = {}) {
   const calls = [];
@@ -16,12 +21,19 @@ function createServices({ existing = {} } = {}) {
     },
     async getCollection({ collectionId }) {
       calls.push(["getCollection", collectionId]);
-      const collections = existing.collections ?? { listings: existing.collection, requests: existing.requests };
+      const collections = existing.collections ?? {
+        listings: existing.collection,
+        requests: existing.requests,
+        messages: existing.messages,
+      };
       if (!collections[collectionId]) throw notFound();
       return collections[collectionId];
     },
     async createCollection(params) {
       calls.push(["createCollection", params]);
+    },
+    async updateCollection(params) {
+      calls.push(["updateCollection", params]);
     },
     async createStringAttribute(params) {
       calls.push(["createStringAttribute", params]);
@@ -57,6 +69,7 @@ test("creates the database, listing collection schema, and private photo bucket"
       databaseId: "market-db",
       collectionId: "listings",
       requestsCollectionId: "requests",
+      messagesCollectionId: "messages",
       bucketId: "listing-photos",
     },
     log: (message) => messages.push(message),
@@ -70,17 +83,27 @@ test("creates the database, listing collection schema, and private photo bucket"
   const requests = calls.find(([name, params]) => name === "createCollection" && params.collectionId === "requests")[1];
   assert.equal(requests.documentSecurity, true);
   assert.deepEqual(requests.attributes, PURCHASE_REQUEST_ATTRIBUTES);
-  assert.deepEqual(requests.permissions, ['create("users")']);
-  assert.deepEqual(requests.indexes, [{ key: "by_buyer", type: "key", attributes: ["buyerId"] }]);
+  assert.deepEqual(requests.permissions, []);
+  assert.deepEqual(requests.indexes, [
+    { key: "by_buyer", type: "key", attributes: ["buyerId"] },
+    { key: "by_seller", type: "key", attributes: ["sellerId"] },
+  ]);
+
+  const messagesCollection = calls.find(([name, params]) => name === "createCollection" && params.collectionId === "messages")[1];
+  assert.equal(messagesCollection.documentSecurity, true);
+  assert.deepEqual(messagesCollection.attributes, CONVERSATION_MESSAGE_ATTRIBUTES);
+  assert.deepEqual(messagesCollection.permissions, []);
+  assert.deepEqual(messagesCollection.indexes, [{ key: "by_request", type: "key", attributes: ["requestId"] }]);
 
   const bucket = calls.find(([name]) => name === "createBucket")[1];
   assert.equal(bucket.fileSecurity, true);
   assert.deepEqual(bucket.permissions, ['read("users")', 'create("users")']);
-  assert.equal(calls.filter(([name]) => name.startsWith("create")).length, 4);
+  assert.equal(calls.filter(([name]) => ["createDatabase", "createCollection", "createBucket"].includes(name)).length, 5);
   assert.deepEqual(messages, [
     "Créé : base market-db",
     "Créé : collection listings",
     "Créé : collection requests",
+    "Créé : collection messages",
     "Créé : bucket listing-photos",
   ]);
 });
@@ -101,12 +124,25 @@ test("leaves existing resources untouched when their schema matches", async () =
       requests: {
         $id: "requests",
         documentSecurity: true,
-        $permissions: ['create("users")'],
+        $permissions: [],
         attributes: PURCHASE_REQUEST_ATTRIBUTES.map((attribute) => ({
           ...attribute,
           status: "available",
         })),
-        indexes: [{ key: "by_buyer", type: "key", attributes: ["buyerId"], status: "available" }],
+        indexes: [
+          { key: "by_buyer", type: "key", attributes: ["buyerId"], status: "available" },
+          { key: "by_seller", type: "key", attributes: ["sellerId"], status: "available" },
+        ],
+      },
+      messages: {
+        $id: "messages",
+        documentSecurity: true,
+        $permissions: [],
+        attributes: CONVERSATION_MESSAGE_ATTRIBUTES.map((attribute) => ({
+          ...attribute,
+          status: "available",
+        })),
+        indexes: [{ key: "by_request", type: "key", attributes: ["requestId"], status: "available" }],
       },
       bucket: {
         $id: "listing-photos",
@@ -123,6 +159,7 @@ test("leaves existing resources untouched when their schema matches", async () =
       databaseId: "market-db",
       collectionId: "listings",
       requestsCollectionId: "requests",
+      messagesCollectionId: "messages",
       bucketId: "listing-photos",
     },
     log() {},
@@ -158,6 +195,7 @@ test("adds the optional seller metadata fields to an existing collection", async
       databaseId: "market-db",
       collectionId: "listings",
       requestsCollectionId: "requests",
+      messagesCollectionId: "messages",
       bucketId: "listing-photos",
     },
     log() {},
@@ -216,21 +254,41 @@ test("adds the buyer index to an existing purchase-request collection", async ()
       databaseId: "market-db",
       collectionId: "listings",
       requestsCollectionId: "requests",
+      messagesCollectionId: "messages",
       bucketId: "listing-photos",
     },
     log() {},
   });
 
-  assert.deepEqual(calls.find(([name]) => name === "createIndex"), [
-    "createIndex",
-    {
+  assert.deepEqual(
+    calls.filter(([name, params]) => name === "createIndex" && params.collectionId === "requests"),
+    [
+      ["createIndex", {
+        databaseId: "market-db",
+        collectionId: "requests",
+        key: "by_buyer",
+        type: "key",
+        attributes: ["buyerId"],
+      }],
+      ["createIndex", {
+        databaseId: "market-db",
+        collectionId: "requests",
+        key: "by_seller",
+        type: "key",
+        attributes: ["sellerId"],
+      }],
+    ],
+  );
+  assert.deepEqual(
+    calls.find(([name]) => name === "updateCollection"),
+    ["updateCollection", {
       databaseId: "market-db",
       collectionId: "requests",
-      key: "by_buyer",
-      type: "key",
-      attributes: ["buyerId"],
-    },
-  ]);
+      name: "Demandes d’achat et de don",
+      permissions: [],
+      documentSecurity: true,
+    }],
+  );
 });
 
 test("stops rather than silently accepting a collection with missing attributes", async () => {
@@ -254,6 +312,7 @@ test("stops rather than silently accepting a collection with missing attributes"
         databaseId: "market-db",
         collectionId: "listings",
         requestsCollectionId: "requests",
+        messagesCollectionId: "messages",
         bucketId: "listing-photos",
       },
       log() {},
