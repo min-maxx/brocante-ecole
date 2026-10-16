@@ -211,6 +211,16 @@ function priceLabel(price) {
   return Number(price) === 0 ? "Don" : `${Number(price)} €`;
 }
 
+function relativeTimeLabel(value) {
+  const createdAt = Date.parse(value || "");
+  if (Number.isNaN(createdAt)) return "";
+  const minutes = Math.max(0, Math.floor((Date.now() - createdAt) / 60000));
+  if (minutes < 1) return "à l’instant";
+  if (minutes < 60) return `il y a ${minutes} min`;
+  if (minutes < 1440) return `il y a ${Math.round(minutes / 60)} h`;
+  return `il y a ${Math.round(minutes / 1440)} j`;
+}
+
 function titleCase(value) {
   return value.trim().toLocaleLowerCase("fr").replace(/(^|[-\s'’])([\p{L}\p{N}])/gu, (match, separator, firstLetter) =>
     separator + firstLetter.toLocaleUpperCase("fr")
@@ -698,18 +708,22 @@ export function createMarketplace({
     const otherFamily = role === "sales"
       ? request.buyerInitials || "Famille acheteuse"
       : request.sellerInitials || "Famille vendeuse";
-    const initialOffer = request.type === "donation"
-      ? `<strong>${role === "sales" ? "Demande de don reçue" : "Votre demande de don"}</strong>`
-      : `<strong>${role === "sales" ? "Offre reçue" : "Votre offre"} : ${Number(request.amount)} €</strong>`;
+    const offerLabel = request.type === "donation" ? "Demande de don" : `Offre : ${Number(request.amount)} €`;
+    const offerIsMine = request.buyerId === user?.$id;
     const offerTime = Date.parse(request.$createdAt);
+    const listing = listings.find((item) => item.$id === request.listingId);
+    const listingPreview = [
+      priceLabel(request.listingPrice),
+      listing ? conditionLabel(listing.condition) : "",
+    ].filter(Boolean).join(" · ");
     const events = [
       {
         kind: "offer",
         createdAt: Number.isNaN(offerTime) ? 0 : offerTime,
-        markup: `<article class="conversation-event offer-event">
-          ${initialOffer}
-          ${request.type === "donation" ? "" : requestPriceMarkup(request)}
-          <small>Statut : ${escapeHtml(requestStatusLabel(request))}</small>
+        markup: `<article class="conversation-message conversation-offer${offerIsMine ? " mine" : ""}">
+          <strong class="offer-amount">${escapeHtml(offerLabel)}</strong>
+          <span class="offer-state">${escapeHtml(requestStatusLabel(request))}</span>
+          ${Number.isNaN(offerTime) ? "" : `<small><time datetime="${new Date(offerTime).toISOString()}">${escapeHtml(relativeTimeLabel(request.$createdAt))}</time></small>`}
         </article>`,
       },
       ...conversationMessages.map((item) => ({
@@ -738,10 +752,11 @@ export function createMarketplace({
         </header>
         <div class="conversation-listing-preview">
           <span class="purchase-card-photo">${photoMarkup}</span>
-          <span>
+          <span class="conversation-listing-details">
             <strong>${escapeHtml(request.listingTitle)}</strong>
-            ${requestPriceMarkup(request)}
+            <span>${escapeHtml(listingPreview)}</span>
           </span>
+          <button class="conversation-listing-link" type="button" data-action="open-listing" data-listing-id="${escapeHtml(request.listingId)}" aria-label="Voir l’annonce : ${escapeHtml(request.listingTitle)}">Voir l’annonce</button>
         </div>
         ${message && messageKind === "error" ? `<p class="market-message" data-kind="error" role="alert">${escapeHtml(message)}${loadingConversationMessages ? "" : `<button class="text-button" type="button" data-action="retry-conversation">Réessayer</button>`}</p>` : ""}
         <div class="conversation-events" aria-label="Messages et offres de la conversation" aria-live="polite">
@@ -1306,7 +1321,7 @@ export function createMarketplace({
     switch (button.dataset.action) {
       case "open-listing":
         event.preventDefault();
-        if (!listings.some((listing) => listing.$id === button.dataset.listingId)) return;
+        if (!button.dataset.listingId) return;
         selectedListingId = button.dataset.listingId;
         detailPhotoIndex = 0;
         view = "detail";
