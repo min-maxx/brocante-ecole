@@ -25,18 +25,31 @@ export const PURCHASE_REQUEST_ATTRIBUTES = [
   { key: "listingPrice", type: "integer", required: true },
   { key: "listingPhotoId", type: "string", size: 36, required: false },
   { key: "sellerInitials", type: "string", size: 20, required: false },
+  { key: "buyerInitials", type: "string", size: 20, required: false },
   { key: "buyerId", type: "string", size: 36, required: true },
   { key: "sellerId", type: "string", size: 36, required: true },
   { key: "type", type: "string", size: 20, required: true },
   { key: "amount", type: "integer", required: true },
   { key: "status", type: "string", size: 20, required: true },
+  { key: "lastMessage", type: "string", size: 1000, required: false },
+];
+
+export const CONVERSATION_MESSAGE_ATTRIBUTES = [
+  { key: "requestId", type: "string", size: 36, required: true },
+  { key: "senderId", type: "string", size: 36, required: true },
+  { key: "content", type: "string", size: 1000, required: true },
 ];
 
 const COLLECTION_PERMISSIONS = ['read("users")', 'create("users")'];
-const PURCHASE_REQUEST_COLLECTION_PERMISSIONS = ['create("users")'];
+const PRIVATE_COLLECTION_PERMISSIONS = [];
 const BUCKET_PERMISSIONS = ['read("users")', 'create("users")'];
 const OPTIONAL_LISTING_ATTRIBUTES = new Set(["subcategory", "shoeSize", "author", "language", "sellerId", "sellerInitials"]);
-const PURCHASE_REQUESTS_INDEX = { key: "by_buyer", type: "key", attributes: ["buyerId"] };
+const OPTIONAL_PURCHASE_REQUEST_ATTRIBUTES = new Set(["buyerInitials", "lastMessage"]);
+const PURCHASE_REQUEST_INDEXES = [
+  { key: "by_buyer", type: "key", attributes: ["buyerId"] },
+  { key: "by_seller", type: "key", attributes: ["sellerId"] },
+];
+const CONVERSATION_MESSAGES_INDEX = { key: "by_request", type: "key", attributes: ["requestId"] };
 
 function isNotFound(error) {
   return error?.code === 404;
@@ -104,24 +117,96 @@ async function verifyCollection(collection, { databases, databaseId, collectionI
   }
 }
 
-async function verifyPurchaseRequestCollection(collection, { databases, databaseId, collectionId, log }) {
+async function verifyPrivateCollectionPermissions(collection, {
+  databases,
+  databaseId,
+  collectionId,
+  expectedPermissions,
+  allowLegacyRequestPermissions = false,
+  log,
+}) {
   if (collection.documentSecurity !== true) {
     throw new Error(
-      "La collection des demandes existante n’active pas la sécurité des documents. Aucune modification automatique n’a été appliquée.",
+      `La collection « ${collection.$id} » n’active pas la sécurité des documents. Aucune modification automatique n’a été appliquée.`,
     );
   }
   const actualPermissions = collection.$permissions ?? [];
-  if (actualPermissions.length !== PURCHASE_REQUEST_COLLECTION_PERMISSIONS.length
-    || PURCHASE_REQUEST_COLLECTION_PERMISSIONS.some((permission) => !actualPermissions.includes(permission))) {
+  if (actualPermissions.length === expectedPermissions.length
+    && expectedPermissions.every((permission) => actualPermissions.includes(permission))) return;
+
+  const legacyRequestPermissions = ['create("users")'];
+  if (allowLegacyRequestPermissions
+    && actualPermissions.length === legacyRequestPermissions.length
+    && legacyRequestPermissions.every((permission) => actualPermissions.includes(permission))) {
+    await databases.updateCollection({
+      databaseId,
+      collectionId,
+      name: collection.name || "Demandes d’achat et de don",
+      permissions: expectedPermissions,
+      documentSecurity: true,
+    });
+    log(`Permissions de collection restreintes : ${collectionId}`);
+    return;
+  }
+
+  if (actualPermissions.length !== expectedPermissions.length
+    || expectedPermissions.some((permission) => !actualPermissions.includes(permission))) {
     throw new Error(
-      `La collection des demandes « ${collection.$id} » doit autoriser uniquement la création par les familles connectées. ` +
+      `La collection « ${collection.$id} » doit avoir exactement les permissions ${JSON.stringify(expectedPermissions)}. ` +
       "Aucune modification automatique n’a été appliquée.",
     );
   }
+}
 
+async function ensureIndexes(collection, {
+  databases,
+  databaseId,
+  collectionId,
+  expectedIndexes,
+  resourceName,
+  log,
+}) {
+  for (const expected of expectedIndexes) {
+    const existing = (collection.indexes ?? []).find((index) => index.key === expected.key);
+    if (!existing) {
+      await databases.createIndex({ databaseId, collectionId, ...expected });
+      log(`Index créé : ${expected.key}`);
+      continue;
+    }
+    if (existing.type !== expected.type
+      || existing.attributes?.length !== expected.attributes.length
+      || !expected.attributes.every((attribute) => existing.attributes.includes(attribute))) {
+      throw new Error(
+        `L’index « ${expected.key} » de la collection ${resourceName} est incompatible. ` +
+        "Aucune modification automatique n’a été appliquée.",
+      );
+    }
+  }
+}
+
+async function verifyPurchaseRequestCollection(collection, { databases, databaseId, collectionId, log }) {
+  await verifyPrivateCollectionPermissions(collection, {
+    databases,
+    databaseId,
+    collectionId,
+    expectedPermissions: PRIVATE_COLLECTION_PERMISSIONS,
+    allowLegacyRequestPermissions: true,
+    log,
+  });
   const existingAttributes = new Map((collection.attributes ?? []).map((attribute) => [attribute.key, attribute]));
   for (const expected of PURCHASE_REQUEST_ATTRIBUTES) {
     const actual = existingAttributes.get(expected.key);
+    if (!actual && OPTIONAL_PURCHASE_REQUEST_ATTRIBUTES.has(expected.key)) {
+      await databases.createStringAttribute({
+        databaseId,
+        collectionId,
+        key: expected.key,
+        size: expected.size,
+        required: false,
+      });
+      log(`Attribut facultatif ajouté : ${expected.key}`);
+      continue;
+    }
     const matches = actual
       && actual.type === expected.type
       && actual.size === (expected.size ?? actual.size)
@@ -135,22 +220,47 @@ async function verifyPurchaseRequestCollection(collection, { databases, database
     }
   }
 
-  const buyerIndex = (collection.indexes ?? []).find((index) => index.key === PURCHASE_REQUESTS_INDEX.key);
-  if (!buyerIndex) {
-    await databases.createIndex({
-      databaseId,
-      collectionId,
-      ...PURCHASE_REQUESTS_INDEX,
-    });
-    log(`Index créé : ${PURCHASE_REQUESTS_INDEX.key}`);
-  } else if (buyerIndex.type !== PURCHASE_REQUESTS_INDEX.type
-    || buyerIndex.attributes?.length !== PURCHASE_REQUESTS_INDEX.attributes.length
-    || !PURCHASE_REQUESTS_INDEX.attributes.every((attribute) => buyerIndex.attributes.includes(attribute))) {
-    throw new Error(
-      `L’index « ${PURCHASE_REQUESTS_INDEX.key} » de la collection des demandes est incompatible. ` +
-      "Aucune modification automatique n’a été appliquée.",
-    );
+  await ensureIndexes(collection, {
+    databases,
+    databaseId,
+    collectionId,
+    expectedIndexes: PURCHASE_REQUEST_INDEXES,
+    resourceName: "demandes",
+    log,
+  });
+}
+
+async function verifyConversationMessageCollection(collection, { databases, databaseId, collectionId, log }) {
+  await verifyPrivateCollectionPermissions(collection, {
+    databases,
+    databaseId,
+    collectionId,
+    expectedPermissions: PRIVATE_COLLECTION_PERMISSIONS,
+    log,
+  });
+  const existingAttributes = new Map((collection.attributes ?? []).map((attribute) => [attribute.key, attribute]));
+  for (const expected of CONVERSATION_MESSAGE_ATTRIBUTES) {
+    const actual = existingAttributes.get(expected.key);
+    const matches = actual
+      && actual.type === expected.type
+      && actual.size === expected.size
+      && actual.required === expected.required
+      && Boolean(actual.array) === Boolean(expected.array);
+    if (!matches) {
+      throw new Error(
+        `L’attribut « ${expected.key} » de la collection des messages « ${collection.$id} » manque ou ne correspond pas au schéma attendu. ` +
+        "Aucune modification automatique n’a été appliquée.",
+      );
+    }
   }
+  await ensureIndexes(collection, {
+    databases,
+    databaseId,
+    collectionId,
+    expectedIndexes: [CONVERSATION_MESSAGES_INDEX],
+    resourceName: "messages",
+    log,
+  });
 }
 
 function verifyBucket(bucket) {
@@ -181,7 +291,7 @@ async function ensureResource({ get, create, verify, description, log }) {
 }
 
 export async function provisionMarketplace({ databases, storage, config, log = console.log }) {
-  const { databaseId, collectionId, requestsCollectionId, bucketId } = config;
+  const { databaseId, collectionId, requestsCollectionId, messagesCollectionId, bucketId } = config;
 
   await ensureResource({
     get: () => databases.get({ databaseId }),
@@ -217,11 +327,11 @@ export async function provisionMarketplace({ databases, storage, config, log = c
       databaseId,
       collectionId: requestsCollectionId,
       name: "Demandes d’achat et de don",
-      permissions: PURCHASE_REQUEST_COLLECTION_PERMISSIONS,
+      permissions: PRIVATE_COLLECTION_PERMISSIONS,
       documentSecurity: true,
       enabled: true,
       attributes: PURCHASE_REQUEST_ATTRIBUTES,
-      indexes: [PURCHASE_REQUESTS_INDEX],
+      indexes: PURCHASE_REQUEST_INDEXES,
     }),
     verify: (collection) => verifyPurchaseRequestCollection(collection, {
       databases,
@@ -230,6 +340,28 @@ export async function provisionMarketplace({ databases, storage, config, log = c
       log,
     }),
     description: `collection ${requestsCollectionId}`,
+    log,
+  });
+
+  await ensureResource({
+    get: () => databases.getCollection({ databaseId, collectionId: messagesCollectionId }),
+    create: () => databases.createCollection({
+      databaseId,
+      collectionId: messagesCollectionId,
+      name: "Messages privés",
+      permissions: PRIVATE_COLLECTION_PERMISSIONS,
+      documentSecurity: true,
+      enabled: true,
+      attributes: CONVERSATION_MESSAGE_ATTRIBUTES,
+      indexes: [CONVERSATION_MESSAGES_INDEX],
+    }),
+    verify: (collection) => verifyConversationMessageCollection(collection, {
+      databases,
+      databaseId,
+      collectionId: messagesCollectionId,
+      log,
+    }),
+    description: `collection ${messagesCollectionId}`,
     log,
   });
 
@@ -256,6 +388,7 @@ function readConfig(environment) {
     "APPWRITE_DATABASE_ID",
     "APPWRITE_LISTINGS_COLLECTION_ID",
     "APPWRITE_REQUESTS_COLLECTION_ID",
+    "APPWRITE_MESSAGES_COLLECTION_ID",
     "APPWRITE_LISTING_PHOTOS_BUCKET_ID",
   ];
   const missing = required.filter((name) => !environment[name]?.trim());
@@ -269,6 +402,7 @@ function readConfig(environment) {
     databaseId: environment.APPWRITE_DATABASE_ID,
     collectionId: environment.APPWRITE_LISTINGS_COLLECTION_ID,
     requestsCollectionId: environment.APPWRITE_REQUESTS_COLLECTION_ID,
+    messagesCollectionId: environment.APPWRITE_MESSAGES_COLLECTION_ID,
     bucketId: environment.APPWRITE_LISTING_PHOTOS_BUCKET_ID,
   };
 }

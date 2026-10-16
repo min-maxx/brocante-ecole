@@ -28,9 +28,13 @@ function existingListing() {
 async function installMarketplaceApi(page, initialListings = []) {
   const listings = [...initialListings];
   const requests = [];
+  const conversationMessages = [];
   const published = [];
   const createdRequests = [];
+  const createdMessages = [];
   let uploadedPhotos = 0;
+  let currentUserId = "family-1";
+  let nextEvent = 1;
 
   await page.route("**/v1/**", async (route) => {
     const request = route.request();
@@ -39,7 +43,87 @@ async function installMarketplaceApi(page, initialListings = []) {
     const collectionId = path.split("/collections/")[1]?.split("/")[0];
 
     if (path.endsWith("/account") && request.method() === "GET") {
-      await route.fulfill({ json: { $id: "family-1", name: "Famille Test", email: "famille@example.test" } });
+      await route.fulfill({
+        json: {
+          $id: currentUserId,
+          name: currentUserId === "family-1" ? "Famille Test" : "Famille Vendeuse",
+          email: currentUserId === "family-1" ? "famille@example.test" : "vendeuse@example.test",
+        },
+      });
+      return;
+    }
+
+    if (path.includes("/functions/e2e-market/executions") && request.method() === "POST") {
+      const input = JSON.parse(request.postDataJSON().body);
+      const execute = () => {
+        if (input.action === "create-request") {
+          const listing = listings.find((item) => item.$id === input.listingId);
+          const { action, message, ...requestData } = input;
+          const purchaseRequest = {
+            ...requestData,
+            listingId: listing.$id,
+            listingTitle: listing.title,
+            listingPrice: listing.price,
+            listingPhotoId: listing.photoIds?.[0] || "",
+            sellerInitials: listing.sellerInitials,
+            buyerInitials: "F. T.",
+            buyerId: currentUserId,
+            sellerId: listing.sellerId,
+            status: "pending",
+            lastMessage: message || (input.type === "donation" ? "Demande de don" : `Offre : ${input.amount} €`),
+            $id: `request-${requests.length + 1}`,
+            $createdAt: `2026-10-10T10:00:0${nextEvent}.000Z`,
+            $updatedAt: `2026-10-10T10:00:0${nextEvent}.000Z`,
+            $permissions: [`read("user:${currentUserId}")`, `read("user:${listing.sellerId}")`],
+          };
+          nextEvent += 1;
+          createdRequests.push(purchaseRequest);
+          requests.unshift(purchaseRequest);
+          if (message) {
+            const conversationMessage = {
+              $id: `message-${conversationMessages.length + 1}`,
+              requestId: purchaseRequest.$id,
+              senderId: currentUserId,
+              content: message,
+              $createdAt: `2026-10-10T10:00:0${nextEvent}.000Z`,
+            };
+            nextEvent += 1;
+            conversationMessages.push(conversationMessage);
+            createdMessages.push(conversationMessage);
+          }
+          return { request: purchaseRequest, messages: conversationMessages.filter((item) => item.requestId === purchaseRequest.$id) };
+        }
+        if (input.action === "send-message") {
+          const purchaseRequest = requests.find((item) => item.$id === input.requestId);
+          if (!purchaseRequest || ![purchaseRequest.buyerId, purchaseRequest.sellerId].includes(currentUserId)) {
+            return { error: { code: "not_participant", message: "Vous ne participez pas à cette conversation." }, status: 403 };
+          }
+          const conversationMessage = {
+            $id: `message-${conversationMessages.length + 1}`,
+            requestId: purchaseRequest.$id,
+            senderId: currentUserId,
+            content: input.content,
+            $createdAt: `2026-10-10T10:00:0${nextEvent}.000Z`,
+          };
+          nextEvent += 1;
+          conversationMessages.push(conversationMessage);
+          createdMessages.push(conversationMessage);
+          purchaseRequest.lastMessage = input.content;
+          purchaseRequest.$updatedAt = conversationMessage.$createdAt;
+          return { message: conversationMessage, request: purchaseRequest };
+        }
+        return { error: { code: "invalid_input", message: "Action invalide." }, status: 400 };
+      };
+      const result = execute();
+      const statusCode = result.status || (input.action === "create-request" ? 201 : 200);
+      await route.fulfill({
+        json: {
+          $id: `execution-${nextEvent}`,
+          status: "completed",
+          responseStatusCode: statusCode,
+          responseBody: JSON.stringify(result),
+        },
+      });
       return;
     }
 
@@ -68,8 +152,10 @@ async function installMarketplaceApi(page, initialListings = []) {
 
     if (path.includes("/databases/") && path.endsWith("/documents") && request.method() === "GET") {
       const documents = collectionId === "e2e-requests"
-        ? requests.filter((item) => item.buyerId === "family-1")
-        : listings;
+        ? requests.filter((item) => item.buyerId === currentUserId || item.sellerId === currentUserId)
+        : collectionId === "e2e-messages"
+          ? conversationMessages
+          : listings;
       await route.fulfill({ json: { total: documents.length, documents } });
       return;
     }
@@ -127,7 +213,16 @@ async function installMarketplaceApi(page, initialListings = []) {
     });
   });
 
-  return { listings, published, requests, createdRequests };
+  return {
+    listings,
+    published,
+    requests,
+    createdRequests,
+    createdMessages,
+    setCurrentUserId(userId) {
+      currentUserId = userId;
+    },
+  };
 }
 
 async function startListing(page, category) {
@@ -226,8 +321,11 @@ test("a family can open an announcement, browse its photos, and return to the li
   const detail = page.locator(".listing-detail");
   const gallery = detail.locator(".listing-detail-gallery");
   await expect(page.getByRole("heading", { name: "Veste imperméable" })).toBeVisible();
+  await expect(detail.locator(".listing-detail-condition")).toHaveText("Bon état");
   await expect(detail.locator(".listing-detail-seller")).toContainText("C. M.");
-  await expect(detail.locator(".listing-detail-row").nth(1)).toContainText("Pull · Kiabi · Rouge");
+  await expect(detail.locator(".listing-detail-row").nth(1)).toContainText("Type / genre");
+  await expect(detail.locator(".listing-detail-row").nth(1).locator("dd")).toHaveText("Pull");
+  await expect(detail.locator(".listing-detail-row").nth(4).locator("dd")).toHaveText("Kiabi · Rouge");
   await expect(detail.locator(".listing-detail-age")).toHaveCount(1);
   await expect(detail.locator(".listing-detail-age dd")).toHaveText("6 ans · 111–116 cm");
   await expect(gallery.locator(".listing-gallery-count")).toHaveText("1 / 3");
@@ -272,9 +370,13 @@ test("a family can send a prefilled offer and find its pending status in purchas
   await page.getByRole("button", { name: "Envoyer une offre" }).click();
 
   await expect(page.getByRole("heading", { name: "Mes achats" })).toBeVisible();
+  await page.getByRole("button", { name: "← Mes achats" }).click();
   await expect(page.locator(".purchase-card")).toContainText("Pull en laine");
   await expect(page.locator(".purchase-card")).toContainText("Offre de prix");
   await expect(page.locator(".purchase-card")).toContainText("3 € proposés");
+  const requestPrices = page.locator(".purchase-card-prices");
+  await expect(requestPrices.getByText("3 € proposés")).toBeVisible();
+  await expect(requestPrices.locator("s")).toHaveText("4 €");
   await expect(page.locator(".purchase-card-status")).toHaveText("Statut : En attente");
   expect(createdRequests).toHaveLength(1);
   expect(createdRequests[0]).toMatchObject({
@@ -286,11 +388,45 @@ test("a family can send a prefilled offer and find its pending status in purchas
     amount: 3,
     status: "pending",
   });
-  expect(createdRequests[0].$permissions).toEqual(['read("user:family-1")']);
+  expect(createdRequests[0].$permissions).toEqual(['read("user:family-1")', 'read("user:seller-2")']);
 
   await page.reload();
   await page.getByRole("button", { name: "Mes achats" }).click();
   await expect(page.locator(".purchase-card-status")).toHaveText("Statut : En attente");
+});
+
+test("buyer and seller can exchange persistent messages in an offer conversation", async ({ page }) => {
+  const api = await installMarketplaceApi(page, [existingListing()]);
+
+  await page.goto("/");
+  await page.getByRole("link", { name: "Consulter l’annonce : Pull en laine" }).click();
+  await page.getByRole("spinbutton", { name: "Votre offre" }).fill("3");
+  await page.getByLabel("Message (facultatif)").fill("Bonjour, le pull est-il toujours disponible ?");
+  await page.getByRole("button", { name: "Envoyer une offre" }).click();
+
+  await expect(page.getByRole("heading", { name: "Conversation avec S. V." })).toBeVisible();
+  await expect(page.locator(".conversation-events").getByText("3 € proposés")).toBeVisible();
+  await expect(page.getByText("Bonjour, le pull est-il toujours disponible ?")).toBeVisible();
+
+  api.setCurrentUserId("seller-2");
+  await page.reload();
+  await page.getByRole("button", { name: "Mes ventes" }).click();
+  await page.getByRole("button", { name: /Pull en laine/ }).click();
+  await expect(page.getByText("Bonjour, le pull est-il toujours disponible ?")).toBeVisible();
+  await page.getByLabel("Votre message").fill("Oui, il est disponible.");
+  await page.getByRole("button", { name: "Envoyer" }).click();
+  await expect(page.getByText("Oui, il est disponible.")).toBeVisible();
+
+  api.setCurrentUserId("family-1");
+  await page.reload();
+  await page.getByRole("button", { name: "Mes achats" }).click();
+  await page.getByRole("button", { name: /Pull en laine/ }).click();
+  await expect(page.getByText("Bonjour, le pull est-il toujours disponible ?")).toBeVisible();
+  await expect(page.getByText("Oui, il est disponible.")).toBeVisible();
+  expect(api.createdMessages.map((item) => item.content)).toEqual([
+    "Bonjour, le pull est-il toujours disponible ?",
+    "Oui, il est disponible.",
+  ]);
 });
 
 test("a free listing sends a donation request instead of an offer", async ({ page }) => {
@@ -301,11 +437,11 @@ test("a free listing sends a donation request instead of an offer", async ({ pag
   await page.getByRole("link", { name: "Consulter l’annonce : Livre à donner" }).click();
 
   await expect(page.getByRole("spinbutton", { name: "Votre offre" })).toHaveCount(0);
-  await page.getByRole("button", { name: "Demander ce don" }).click();
+  await page.getByRole("button", { name: "Envoyer ma demande" }).click();
 
   await expect(page.getByRole("heading", { name: "Mes achats" })).toBeVisible();
+  await page.getByRole("button", { name: "← Mes achats" }).click();
   await expect(page.locator(".purchase-card")).toContainText("Demande de don");
-  await expect(page.locator(".purchase-card")).toContainText("Don demandé");
   await expect(page.locator(".purchase-card-status")).toHaveText("Statut : En attente");
   expect(createdRequests).toHaveLength(1);
   expect(createdRequests[0]).toMatchObject({
