@@ -1,4 +1,5 @@
 import { pathToFileURL } from "node:url";
+import { provisionFunctions } from "./functions.js";
 
 export const LISTING_ATTRIBUTES = [
   { key: "title", type: "string", size: 70, required: true },
@@ -290,8 +291,20 @@ async function ensureResource({ get, create, verify, description, log }) {
   log(`Créé : ${description}`);
 }
 
-export async function provisionMarketplace({ databases, storage, config, log = console.log }) {
+export async function provisionMarketplace({
+  databases,
+  storage,
+  functions,
+  project,
+  inputFile,
+  config,
+  log = console.log,
+}) {
   const { databaseId, collectionId, requestsCollectionId, messagesCollectionId, bucketId } = config;
+  const shouldProvisionFunctions = functions || project || inputFile;
+  if (shouldProvisionFunctions && (!functions || !project || typeof inputFile !== "function")) {
+    throw new Error("Le provisionnement complet exige les services Functions, Project et InputFile d’Appwrite.");
+  }
 
   await ensureResource({
     get: () => databases.get({ databaseId }),
@@ -378,6 +391,10 @@ export async function provisionMarketplace({ databases, storage, config, log = c
     description: `bucket ${bucketId}`,
     log,
   });
+
+  if (shouldProvisionFunctions) {
+    await provisionFunctions({ functions, project, inputFile, config, log });
+  }
 }
 
 function readConfig(environment) {
@@ -404,11 +421,18 @@ function readConfig(environment) {
     requestsCollectionId: environment.APPWRITE_REQUESTS_COLLECTION_ID,
     messagesCollectionId: environment.APPWRITE_MESSAGES_COLLECTION_ID,
     bucketId: environment.APPWRITE_LISTING_PHOTOS_BUCKET_ID,
+    signupFunctionId: environment.APPWRITE_SIGNUP_FUNCTION_ID?.trim() || "6ac8938f000181b4c7df",
+    marketFunctionId: environment.APPWRITE_MARKET_FUNCTION_ID?.trim() || "market-conversations",
+    webPlatformId: environment.APPWRITE_WEB_PLATFORM_ID?.trim() || "market-web",
+    localWebPlatformId: environment.APPWRITE_LOCAL_WEB_PLATFORM_ID?.trim() || "market-web-localhost",
+    allowlistTableId: environment.APPWRITE_ALLOWLIST_TABLE_ID?.trim() || "",
+    signupCallbackUrl: environment.APPWRITE_SIGNUP_CALLBACK_URL?.trim() || "",
   };
 }
 
 async function main() {
-  const { Client, Databases, Storage } = await import("node-appwrite");
+  const { Client, Databases, Functions, Project, Storage } = await import("node-appwrite");
+  const { InputFile } = await import("node-appwrite/file");
   const config = readConfig(process.env);
   const client = new Client()
     .setEndpoint(config.endpoint)
@@ -417,6 +441,9 @@ async function main() {
   await provisionMarketplace({
     databases: new Databases(client),
     storage: new Storage(client),
+    functions: new Functions(client),
+    project: new Project(client),
+    inputFile: (path, filename) => InputFile.fromPath(path, filename),
     config,
   });
   console.log("Le provisionnement Appwrite est terminé.");
