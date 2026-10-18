@@ -630,6 +630,12 @@ button:disabled {
   gap: 12px;
 }
 
+.purchase-request-form[aria-busy="true"] {
+  opacity: 0.55;
+  filter: grayscale(1);
+  pointer-events: none;
+}
+
 .purchase-request-form .form-field {
   gap: 7px;
 }
@@ -640,6 +646,12 @@ button:disabled {
 
 .purchase-request-form button {
   padding: 10px 14px;
+}
+
+.purchase-request-existing {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
 }
 
 .purchase-request-note {
@@ -657,16 +669,17 @@ button:disabled {
 
 .purchase-list {
   display: grid;
-  gap: 14px;
+  gap: 8px;
 }
 
 .purchase-card {
   display: grid;
   width: 100%;
-  grid-template-columns: 130px minmax(0, 1fr);
-  gap: 18px;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 13px;
   overflow: hidden;
-  padding: 14px;
+  padding: 10px 12px;
   border: 1px solid #e0e5dc;
   border-radius: 14px;
   background: #fffefa;
@@ -679,6 +692,75 @@ button:disabled {
 .purchase-card:hover {
   border-color: #b9c9bb;
   box-shadow: 0 10px 28px rgb(38 50 43 / 10%);
+}
+
+.purchase-card-avatar {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  color: #fff;
+  background: #32655a;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.purchase-card-content {
+  display: grid;
+  gap: 3px;
+  align-self: center;
+  min-width: 0;
+}
+
+.purchase-card-contact {
+  font-size: 0.82rem;
+}
+
+.purchase-card-preview {
+  display: block;
+  overflow: hidden;
+  color: #596560;
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.purchase-card-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  font-size: 0.75rem;
+}
+
+.purchase-card-listing-thumb {
+  position: relative;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #e9eee4;
+  font-size: 15px;
+}
+
+.purchase-card-listing-thumb img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.purchase-card-listing-title {
+  min-width: 0;
+  overflow: hidden;
+  color: #596560;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .purchase-card-photo {
@@ -697,68 +779,32 @@ button:disabled {
   object-fit: cover;
 }
 
-.purchase-card-content {
-  display: grid;
-  gap: 5px;
-  align-self: center;
-  min-width: 0;
-}
-
-.purchase-card-content .eyebrow {
-  margin-bottom: 4px;
-}
-
-.purchase-card-content h2 {
-  margin: 0 0 8px;
-  font-size: 1.12rem;
-}
-
-.purchase-card-title {
-  display: block;
-  font-size: 1.12rem;
-  font-weight: 750;
-  line-height: 1.35;
-}
-
-.purchase-card-preview {
-  display: -webkit-box;
-  overflow: hidden;
-  color: #596560;
-  line-height: 1.45;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.purchase-card-kind {
-  color: #64706b;
-  font-size: 0.8rem;
-}
-
-.purchase-card-content > p:not(.eyebrow) {
-  margin: 5px 0;
-  color: #596560;
-  line-height: 1.45;
-}
-
 .purchase-card-prices {
   display: flex;
-  flex-wrap: wrap;
+  flex: 0 0 auto;
   align-items: baseline;
-  gap: 8px;
+  gap: 6px;
+  white-space: nowrap;
 }
 
 .purchase-card-prices strong {
   color: #26352d;
+  font-size: 0.75rem;
 }
 
 .purchase-card-prices s {
   color: #64706b;
-  font-size: 0.9rem;
+  font-size: 0.7rem;
 }
 
-.purchase-card-content .purchase-card-status {
-  color: #32655a;
-  font-weight: 750;
+.purchase-card-time {
+  display: grid;
+  justify-items: end;
+  align-self: start;
+  padding-top: 2px;
+  color: #64706b;
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 .conversation-view {
@@ -857,6 +903,8 @@ button:disabled {
 }
 
 .conversation-message.conversation-offer {
+  display: grid;
+  gap: 4px;
   border: 1px solid #8fac88;
   background: #f1f8e8;
 }
@@ -1573,13 +1621,35 @@ button:disabled {
   }
 
   .purchase-card {
-    grid-template-columns: 88px minmax(0, 1fr);
-    gap: 12px;
-    padding: 10px;
+    grid-template-columns: 40px minmax(0, 1fr) auto;
+    gap: 9px;
+    padding: 9px;
+  }
+
+  .purchase-card-avatar {
+    width: 40px;
+    height: 40px;
   }
 
   .purchase-card-photo {
     min-height: 92px;
+  }
+
+  .purchase-card-time {
+    font-size: 10px;
+  }
+
+  .purchase-card-item {
+    gap: 6px;
+  }
+
+  .purchase-card-listing-thumb {
+    width: 24px;
+    height: 24px;
+  }
+
+  .purchase-card-prices {
+    gap: 4px;
   }
 
   .conversation-listing-preview {

@@ -40,12 +40,12 @@ Le script ne crée pas la table privée des adresses autorisées et n’importe 
    | `buckets.write` | Créer le bucket |
    | `functions.read` | Vérifier les Functions et leurs variables |
    | `functions.write` | Créer/configurer les Functions, variables et déploiements |
-   | `project.read` | Vérifier les plateformes Web |
-   | `project.write` | Créer les plateformes Web de retour et de développement local |
+   | `platforms.read` | Vérifier les plateformes Web existantes |
+   | `platforms.write` | Créer les plateformes Web de retour et de développement local |
 
 6. Créez la clé et copiez sa valeur immédiatement. Appwrite ne l’affiche pas comme un identifiant public : c’est un secret.
 
-Si la console affiche les portées regroupées par service plutôt que sous ces noms exacts, sélectionnez les autorisations de lecture et d’écriture correspondantes pour les bases de données, collections, attributs, buckets, Functions et projet. Les portées de la clé éphémère utilisée à l’exécution par chacune des Functions sont configurées automatiquement par le script.
+Si la console affiche les portées regroupées par service plutôt que sous ces noms exacts, sélectionnez les autorisations de lecture et d’écriture correspondantes pour les bases de données, collections, attributs, buckets, Functions et plateformes. Les portées de la clé éphémère utilisée à l’exécution par chacune des Functions sont configurées automatiquement par le script.
 
 > **La clé est un secret de serveur.** Ne la mettez jamais dans `src/`, dans `.env.local`, dans une variable `VITE_`, dans un commit ou dans un message. Le dépôt ignore `provisioning/.env`; seul le modèle sans secret `provisioning/.env.example` est versionné. Après le provisionnement, supprimez la clé dans **API Keys** ou laissez-la expirer.
 

@@ -92,7 +92,7 @@ npm install --prefix provisioning
 npm run setup --prefix provisioning
 ```
 
-`provisioning/.env` est ignoré par Git. Créez une clé API Appwrite temporaire avec les portées de lecture/écriture sur les bases, collections, attributs, index et buckets, ainsi que `functions.read`, `functions.write`, `project.read` et `project.write`. Ce sont les seuls droits Appwrite à ajouter manuellement. Le script configure les droits d’exécution et les portées serveur des deux Functions. Ne mettez jamais cette clé dans `.env.local`, dans une variable `VITE_` ou dans le dépôt.
+`provisioning/.env` est ignoré par Git. Créez une clé API Appwrite temporaire avec les portées de lecture/écriture sur les bases, collections, attributs, index et buckets, ainsi que `functions.read`, `functions.write`, `platforms.read` et `platforms.write`. Le script a besoin des deux portées `platforms.*` pour vérifier et enregistrer les plateformes Web. Ce sont les seuls droits Appwrite à ajouter manuellement ; le script configure les droits d’exécution et les portées serveur des deux Functions. Ne mettez jamais cette clé dans `.env.local`, dans une variable `VITE_` ou dans le dépôt.
 
 | Variable | Valeur |
 | --- | --- |

@@ -25,9 +25,30 @@ function existingListing() {
   };
 }
 
-async function installMarketplaceApi(page, initialListings = []) {
+function existingPurchaseRequest() {
+  return {
+    $id: "request-existing",
+    $createdAt: "2026-10-10T10:00:00.000Z",
+    $updatedAt: "2026-10-10T10:00:00.000Z",
+    listingId: "existing-listing",
+    listingTitle: "Pull en laine",
+    listingPrice: 4,
+    listingPhotoId: "existing-photo",
+    sellerInitials: "S. V.",
+    buyerInitials: "F. T.",
+    buyerId: "family-1",
+    sellerId: "seller-2",
+    type: "offer",
+    amount: 3,
+    status: "pending",
+    lastMessage: "Offre : 3 €",
+    $permissions: ['read("user:family-1")', 'read("user:seller-2")'],
+  };
+}
+
+async function installMarketplaceApi(page, initialListings = [], initialRequests = []) {
   const listings = [...initialListings];
-  const requests = [];
+  const requests = [...initialRequests];
   const conversationMessages = [];
   const published = [];
   const createdRequests = [];
@@ -358,7 +379,7 @@ test("a family can open an announcement, browse its photos, and return to the li
   await expect(page.getByRole("heading", { name: "Les annonces du marché" })).toBeVisible();
 });
 
-test("a family can send a prefilled offer and find its pending status in purchases", async ({ page }) => {
+test("a family can send a prefilled offer and find its conversation in purchases", async ({ page }) => {
   const { createdRequests } = await installMarketplaceApi(page, [existingListing()]);
 
   await page.goto("/");
@@ -371,13 +392,18 @@ test("a family can send a prefilled offer and find its pending status in purchas
 
   await expect(page.getByRole("heading", { name: "Mes achats" })).toBeVisible();
   await page.getByRole("button", { name: "← Mes achats" }).click();
-  await expect(page.locator(".purchase-card")).toContainText("Pull en laine");
-  await expect(page.locator(".purchase-card")).toContainText("Offre de prix");
-  await expect(page.locator(".purchase-card")).toContainText("3 € proposés");
+  const purchaseCard = page.locator(".purchase-card");
+  await expect(purchaseCard).toContainText("S. V.");
+  await expect(purchaseCard.locator(".purchase-card-avatar")).toHaveText("S");
+  await expect(purchaseCard.locator(".purchase-card-preview")).toHaveText("Offre : 3 €");
+  await expect(purchaseCard.locator(".purchase-card-listing-title")).toHaveText("Pull en laine");
   const requestPrices = page.locator(".purchase-card-prices");
   await expect(requestPrices.getByText("3 € proposés")).toBeVisible();
   await expect(requestPrices.locator("s")).toHaveText("4 €");
-  await expect(page.locator(".purchase-card-status")).toHaveText("Statut : En attente");
+  await expect(purchaseCard.locator(".purchase-card-listing-thumb")).toBeVisible();
+  await expect(purchaseCard.locator(".purchase-card-time")).toBeVisible();
+  await expect(purchaseCard).toHaveCSS("grid-template-columns", /44px/);
+  await expect(page.locator(".purchase-card-status")).toHaveCount(0);
   expect(createdRequests).toHaveLength(1);
   expect(createdRequests[0]).toMatchObject({
     listingId: "existing-listing",
@@ -390,9 +416,91 @@ test("a family can send a prefilled offer and find its pending status in purchas
   });
   expect(createdRequests[0].$permissions).toEqual(['read("user:family-1")', 'read("user:seller-2")']);
 
+  await purchaseCard.click();
+  await expect(page.locator(".conversation-offer .offer-state")).toHaveText("En attente");
   await page.reload();
   await page.getByRole("button", { name: "Mes achats" }).click();
-  await expect(page.locator(".purchase-card-status")).toHaveText("Statut : En attente");
+  await page.locator(".purchase-card").click();
+  await expect(page.locator(".conversation-offer .offer-state")).toHaveText("En attente");
+});
+
+test("opens the existing conversation from an announcement instead of offering again", async ({ page }) => {
+  const api = await installMarketplaceApi(page, [existingListing()], [existingPurchaseRequest()]);
+
+  await page.goto("/");
+  await page.getByRole("link", { name: "Consulter l’annonce : Pull en laine" }).click();
+
+  await expect(page.locator("#purchase-request-form")).toHaveCount(0);
+  await page.getByRole("button", { name: "Voir la conversation" }).click();
+  await expect(page.getByRole("heading", { name: "Conversation avec S. V." })).toBeVisible();
+  await expect(page.locator(".conversation-offer")).toContainText("Offre : 3 €");
+  expect(api.createdRequests).toHaveLength(0);
+});
+
+test("requires a successful conversation check before showing the offer form", async ({ page }) => {
+  await installMarketplaceApi(page, [existingListing()], [existingPurchaseRequest()]);
+  let failNextRequestLookup = true;
+  await page.route(
+    (url) => new URL(url).pathname.endsWith("/collections/e2e-requests/documents"),
+    async (route) => {
+      if (failNextRequestLookup) {
+        failNextRequestLookup = false;
+        await route.fulfill({
+          status: 503,
+          json: { code: 503, type: "server_error", message: "Temporary failure" },
+        });
+        return;
+      }
+      await route.fallback();
+    },
+  );
+
+  await page.goto("/");
+  await page.getByRole("link", { name: "Consulter l’annonce : Pull en laine" }).click();
+  await expect(page.locator("#purchase-request-form")).toHaveCount(0);
+  await page.getByRole("button", { name: "Réessayer" }).click();
+
+  await expect(page.locator("#purchase-request-form")).toHaveCount(0);
+  await page.getByRole("button", { name: "Voir la conversation" }).click();
+  await expect(page.getByRole("heading", { name: "Conversation avec S. V." })).toBeVisible();
+});
+
+test("keeps the submitted offer visible and disables the offer block while sending", async ({ page }) => {
+  await installMarketplaceApi(page, [existingListing()]);
+  let markRequestStarted;
+  const requestStarted = new Promise((resolve) => {
+    markRequestStarted = resolve;
+  });
+  let releaseRequest;
+  const requestGate = new Promise((resolve) => {
+    releaseRequest = resolve;
+  });
+  await page.route("**/v1/functions/e2e-market/executions", async (route) => {
+    markRequestStarted();
+    await requestGate;
+    await route.fallback();
+  });
+
+  await page.goto("/");
+  await page.getByRole("link", { name: "Consulter l’annonce : Pull en laine" }).click();
+  const offerForm = page.locator(".purchase-request-form");
+  const offerAmount = page.getByRole("spinbutton", { name: "Votre offre" });
+  await offerAmount.fill("3");
+  await page.getByRole("button", { name: "Envoyer une offre" }).click();
+  await requestStarted;
+
+  try {
+    await expect(offerAmount).toHaveValue("3");
+    await expect(offerForm).toHaveAttribute("aria-busy", "true");
+    await expect(offerForm).toHaveCSS("opacity", "0.55");
+    await expect(offerAmount).toBeDisabled();
+    await expect(page.getByRole("textbox", { name: "Message (facultatif)" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Envoi en cours…" })).toBeDisabled();
+  } finally {
+    releaseRequest();
+  }
+
+  await expect(page.getByRole("heading", { name: "Mes achats" })).toBeVisible();
 });
 
 test("buyer and seller can exchange persistent messages in an offer conversation", async ({ page }) => {
@@ -442,6 +550,14 @@ test("offer message aligns with its author in both views", async ({ page }) => {
   await expect(buyerOffer).toContainText("Offre : 3 €");
   await expect(buyerOffer).toContainText("En attente");
   await expect(buyerOffer).toHaveCSS("justify-self", "end");
+  await expect(buyerOffer).toHaveCSS("display", "grid");
+  const [amountBounds, statusBounds, timeBounds] = await Promise.all([
+    buyerOffer.locator(".offer-amount").boundingBox(),
+    buyerOffer.locator(".offer-state").boundingBox(),
+    buyerOffer.locator("small").boundingBox(),
+  ]);
+  expect(statusBounds.y).toBeGreaterThan(amountBounds.y);
+  expect(timeBounds.y).toBeGreaterThan(statusBounds.y);
 
   api.setCurrentUserId("seller-2");
   await page.reload();
@@ -479,8 +595,12 @@ test("a free listing sends a donation request instead of an offer", async ({ pag
 
   await expect(page.getByRole("heading", { name: "Mes achats" })).toBeVisible();
   await page.getByRole("button", { name: "← Mes achats" }).click();
-  await expect(page.locator(".purchase-card")).toContainText("Demande de don");
-  await expect(page.locator(".purchase-card-status")).toHaveText("Statut : En attente");
+  const purchaseCard = page.locator(".purchase-card");
+  await expect(purchaseCard.locator(".purchase-card-contact")).toHaveText("S. V.");
+  await expect(purchaseCard.locator(".purchase-card-listing-title")).toHaveText("Livre à donner");
+  await expect(purchaseCard.locator(".purchase-card-prices")).toHaveText("Demande de don");
+  await purchaseCard.click();
+  await expect(page.locator(".conversation-offer .offer-state")).toHaveText("En attente");
   expect(createdRequests).toHaveLength(1);
   expect(createdRequests[0]).toMatchObject({
     listingId: "existing-listing",
@@ -1016,7 +1136,7 @@ test("a family can retry loading listings after a temporary Appwrite error", asy
       return;
     }
 
-    if (path.includes("/databases/") && path.endsWith("/documents") && request.method() === "GET") {
+    if (path.includes("/collections/e2e-listings/documents") && request.method() === "GET") {
       listAttempts += 1;
       if (listAttempts === 1) {
         await route.fulfill({
@@ -1026,6 +1146,11 @@ test("a family can retry loading listings after a temporary Appwrite error", asy
       } else {
         await route.fulfill({ json: { total: 0, documents: [] } });
       }
+      return;
+    }
+
+    if (path.includes("/collections/e2e-requests/documents") && request.method() === "GET") {
+      await route.fulfill({ json: { total: 0, documents: [] } });
       return;
     }
 

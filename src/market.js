@@ -285,6 +285,7 @@ export function createMarketplace({
   let user = null;
   let listings = [];
   let purchaseRequests = [];
+  let buyerPurchaseRequests = [];
   let conversationMessages = [];
   let view = "list";
   let selectedListingId = "";
@@ -297,6 +298,11 @@ export function createMarketplace({
   let loading = false;
   let publishing = false;
   let submittingRequest = false;
+  let requestDraft = null;
+  let loadingBuyerPurchaseRequests = false;
+  let buyerPurchaseRequestsLoaded = false;
+  let buyerPurchaseRequestsLoadFailed = false;
+  let buyerPurchaseRequestsLoadVersion = 0;
   let submittingMessage = false;
   let loadingPurchaseRequests = false;
   let selectedCategory = "";
@@ -321,6 +327,12 @@ export function createMarketplace({
     message = text;
     messageKind = kind;
     render();
+  }
+
+  function sortPurchaseRequests(requests) {
+    return [...requests].sort((left, right) =>
+      String(right.$updatedAt || right.$createdAt || "").localeCompare(String(left.$updatedAt || left.$createdAt || ""))
+    );
   }
 
   function headerMarkup() {
@@ -619,20 +631,37 @@ export function createMarketplace({
       ["Détails", details.item.slice(1).join(" · ")],
     ].filter(([, value]) => value);
     const sellerId = listingSellerId(listing);
+    const savedRequestDraft = requestDraft?.listingId === listing.$id ? requestDraft : null;
+    const existingRequest = buyerPurchaseRequests.find((request) => request.listingId === listing.$id);
+    const requestFormMarkup = `<form class="purchase-request-form${Number(listing.price) === 0 ? " donation-request-form" : ""}" id="purchase-request-form" data-request-type="${Number(listing.price) === 0 ? "donation" : "offer"}" aria-label="${Number(listing.price) === 0 ? "Demander ce don" : "Faire une offre"}" aria-busy="${submittingRequest}">
+      <h2>${Number(listing.price) === 0 ? "Demander ce don" : "Faire une offre"}</h2>
+      ${Number(listing.price) === 0 ? "" : `<label class="form-field" for="purchase-offer-amount">Votre offre
+        <input id="purchase-offer-amount" name="amount" type="number" min="1" step="1" value="${escapeHtml(savedRequestDraft?.amount ?? listing.price)}" required${submittingRequest ? " disabled" : ""}>
+      </label>`}
+      <label class="form-field purchase-request-message-field" for="purchase-request-message">Message <span>(facultatif)</span>
+        <textarea id="purchase-request-message" name="message" rows="3" maxlength="1000" placeholder="Bonjour, je suis intéressé·e…"${submittingRequest ? " disabled" : ""}>${escapeHtml(savedRequestDraft?.message ?? "")}</textarea>
+      </label>
+      <button class="button-primary" type="submit"${submittingRequest ? " disabled" : ""}>${submittingRequest ? "Envoi en cours…" : Number(listing.price) === 0 ? "Envoyer ma demande" : "Envoyer une offre"}</button>
+    </form>`;
     const requestMarkup = sellerId === user?.$id
       ? `<div class="purchase-request-own"><p class="purchase-request-note">C’est votre annonce.</p><button class="button-light" type="button" data-action="show-sales">Voir mes ventes</button></div>`
-      : sellerId
-        ? `<form class="purchase-request-form${Number(listing.price) === 0 ? " donation-request-form" : ""}" id="purchase-request-form" data-request-type="${Number(listing.price) === 0 ? "donation" : "offer"}" aria-label="${Number(listing.price) === 0 ? "Demander ce don" : "Faire une offre"}">
-            <h2>${Number(listing.price) === 0 ? "Demander ce don" : "Faire une offre"}</h2>
-            ${Number(listing.price) === 0 ? "" : `<label class="form-field" for="purchase-offer-amount">Votre offre
-              <input id="purchase-offer-amount" name="amount" type="number" min="1" step="1" value="${escapeHtml(listing.price)}" required${submittingRequest ? " disabled" : ""}>
-            </label>`}
-            <label class="form-field purchase-request-message-field" for="purchase-request-message">Message <span>(facultatif)</span>
-              <textarea id="purchase-request-message" name="message" rows="3" maxlength="1000" placeholder="Bonjour, je suis intéressé·e…"${submittingRequest ? " disabled" : ""}></textarea>
-            </label>
-            <button class="button-primary" type="submit"${submittingRequest ? " disabled" : ""}>${submittingRequest ? "Envoi en cours…" : Number(listing.price) === 0 ? "Envoyer ma demande" : "Envoyer une offre"}</button>
-          </form>`
-        : `<p class="purchase-request-note">Cette annonce ne peut pas recevoir de demande pour le moment.</p>`;
+      : !sellerId
+        ? `<p class="purchase-request-note">Cette annonce ne peut pas recevoir de demande pour le moment.</p>`
+        : !configReady
+          ? `<p class="purchase-request-note">L’envoi des demandes n’est pas configuré.</p>`
+          : !buyerPurchaseRequestsLoaded
+            ? buyerPurchaseRequestsLoadFailed
+              ? `<div class="purchase-request-existing" role="alert">
+                  <p class="purchase-request-note">Impossible de vérifier vos conversations existantes.</p>
+                  <button class="button-light" type="button" data-action="retry-buyer-requests">Réessayer</button>
+                </div>`
+              : `<p class="purchase-request-note" role="status">Vérification de vos conversations…</p>`
+            : existingRequest
+              ? `<div class="purchase-request-existing">
+                  <p class="purchase-request-note">Vous avez déjà une conversation pour cette annonce.</p>
+                  <button class="button-light" type="button" data-action="open-existing-conversation" data-request-id="${escapeHtml(existingRequest.$id)}">Voir la conversation</button>
+                </div>`
+              : requestFormMarkup;
 
     return `<main class="market-main">
       <button class="button-light listing-detail-back" type="button" data-action="back-to-list">← Retour aux annonces</button>
@@ -665,7 +694,7 @@ export function createMarketplace({
 
   function requestPriceMarkup(request) {
     return request.type === "donation"
-      ? `<span class="purchase-card-prices">Demande de don</span>`
+      ? `<span class="purchase-card-prices"><strong>Demande de don</strong></span>`
       : `<span class="purchase-card-prices"><strong>${Number(request.amount)} € proposés</strong><s>${escapeHtml(priceLabel(request.listingPrice))}</s></span>`;
   }
 
@@ -685,19 +714,26 @@ export function createMarketplace({
     const otherFamily = role === "sales"
       ? request.buyerInitials || "Famille acheteuse"
       : request.sellerInitials || "Famille vendeuse";
+    const contactInitial = Array.from(otherFamily.trim())[0]?.toLocaleUpperCase("fr") || "F";
     const fallbackPreview = request.type === "donation" ? "Demande de don" : `Offre : ${Number(request.amount)} €`;
-    const requestLabel = request.type === "donation" ? "Demande de don" : "Offre de prix";
+    const updatedAt = request.$updatedAt || request.$createdAt || "";
+    const updatedAtTimestamp = Date.parse(updatedAt);
+    const timeMarkup = Number.isNaN(updatedAtTimestamp)
+      ? ""
+      : `<time class="purchase-card-time" datetime="${new Date(updatedAtTimestamp).toISOString()}">${escapeHtml(relativeTimeLabel(updatedAt))}</time>`;
 
     return `<button class="purchase-card" type="button" data-action="open-conversation" data-request-id="${escapeHtml(request.$id)}" aria-label="Ouvrir la conversation avec ${escapeHtml(otherFamily)} pour ${escapeHtml(request.listingTitle)}">
-      <span class="purchase-card-photo">${photoMarkup}</span>
+      <span class="purchase-card-avatar" aria-hidden="true">${escapeHtml(contactInitial)}</span>
       <span class="purchase-card-content">
-        <span class="eyebrow">${escapeHtml(otherFamily)}</span>
+        <strong class="purchase-card-contact">${escapeHtml(otherFamily)}</strong>
         <span class="purchase-card-preview">${escapeHtml(request.lastMessage || fallbackPreview)}</span>
-        <span class="purchase-card-kind">${requestLabel}</span>
-        <span class="purchase-card-title">${escapeHtml(request.listingTitle)}</span>
-        ${requestPriceMarkup(request)}
-        <span class="purchase-card-status" data-status="${escapeHtml(request.status)}">Statut : ${escapeHtml(requestStatusLabel(request))}</span>
+        <span class="purchase-card-item">
+          <span class="purchase-card-listing-thumb">${photoMarkup}</span>
+          <span class="purchase-card-listing-title">${escapeHtml(request.listingTitle)}</span>
+          ${requestPriceMarkup(request)}
+        </span>
       </span>
+      ${timeMarkup}
     </button>`;
   }
 
@@ -1114,9 +1150,12 @@ export function createMarketplace({
         Query.orderDesc("$updatedAt"),
         Query.limit(100),
       ]);
-      purchaseRequests = result.documents.sort((left, right) =>
-        String(right.$updatedAt || right.$createdAt || "").localeCompare(String(left.$updatedAt || left.$createdAt || ""))
-      );
+      purchaseRequests = sortPurchaseRequests(result.documents);
+      if (role === "purchases") {
+        buyerPurchaseRequests = [...purchaseRequests];
+        buyerPurchaseRequestsLoaded = true;
+        buyerPurchaseRequestsLoadFailed = false;
+      }
       message = "";
       loadingPurchaseRequests = false;
       render();
@@ -1124,6 +1163,35 @@ export function createMarketplace({
       console.error("Impossible de charger les conversations.", error);
       loadingPurchaseRequests = false;
       setMessage("Impossible de charger vos conversations. Vérifiez votre connexion et réessayez.", "error");
+    }
+  }
+
+  async function loadBuyerPurchaseRequests() {
+    if (!configReady || !user || loadingBuyerPurchaseRequests) return;
+
+    const loadVersion = ++buyerPurchaseRequestsLoadVersion;
+    const buyerId = user.$id;
+    loadingBuyerPurchaseRequests = true;
+    buyerPurchaseRequestsLoadFailed = false;
+    render();
+    try {
+      const result = await databases.listDocuments(databaseId, requestsCollectionId, [
+        Query.equal("buyerId", buyerId),
+        Query.orderDesc("$updatedAt"),
+        Query.limit(100),
+      ]);
+      if (loadVersion !== buyerPurchaseRequestsLoadVersion || user?.$id !== buyerId) return;
+      buyerPurchaseRequests = sortPurchaseRequests(result.documents);
+      buyerPurchaseRequestsLoaded = true;
+    } catch (error) {
+      if (loadVersion !== buyerPurchaseRequestsLoadVersion || user?.$id !== buyerId) return;
+      console.error("Impossible de vérifier les conversations existantes.", error);
+      buyerPurchaseRequestsLoadFailed = true;
+    } finally {
+      if (loadVersion === buyerPurchaseRequestsLoadVersion) {
+        loadingBuyerPurchaseRequests = false;
+        render();
+      }
     }
   }
 
@@ -1180,6 +1248,7 @@ export function createMarketplace({
       return;
     }
 
+    requestDraft = { listingId, amount, message: initialMessage };
     submittingRequest = true;
     message = "";
     render();
@@ -1196,9 +1265,16 @@ export function createMarketplace({
       }
       const request = result.request;
       purchaseRequests = [request, ...purchaseRequests.filter((item) => item.$id !== request.$id)];
+      buyerPurchaseRequests = sortPurchaseRequests([
+        request,
+        ...buyerPurchaseRequests.filter((item) => item.$id !== request.$id),
+      ]);
+      buyerPurchaseRequestsLoaded = true;
+      buyerPurchaseRequestsLoadFailed = false;
       view = "purchases";
       selectedConversationId = request.$id;
       conversationMessages = result.messages;
+      requestDraft = null;
       message = type === "donation" ? "Votre demande de don a été envoyée." : "Votre offre a été envoyée.";
       messageKind = "success";
     } catch (error) {
@@ -1327,6 +1403,9 @@ export function createMarketplace({
         view = "detail";
         message = "";
         render();
+        if (!buyerPurchaseRequestsLoaded && !buyerPurchaseRequestsLoadFailed) {
+          await loadBuyerPurchaseRequests();
+        }
         break;
       case "back-to-list":
         selectedListingId = "";
@@ -1356,6 +1435,17 @@ export function createMarketplace({
         break;
       case "open-conversation":
         await openConversation(button.dataset.requestId);
+        break;
+      case "open-existing-conversation": {
+        const requestId = button.dataset.requestId;
+        if (!requestId || !buyerPurchaseRequests.some((request) => request.$id === requestId)) return;
+        view = "purchases";
+        purchaseRequests = [...buyerPurchaseRequests];
+        await openConversation(requestId);
+        break;
+      }
+      case "retry-buyer-requests":
+        await loadBuyerPurchaseRequests();
         break;
       case "close-conversation":
         selectedConversationId = "";
@@ -1631,6 +1721,11 @@ export function createMarketplace({
       selectedConditions = [];
       selectedItemFilters = {};
       purchaseRequests = [];
+      buyerPurchaseRequests = [];
+      buyerPurchaseRequestsLoaded = false;
+      buyerPurchaseRequestsLoadFailed = false;
+      buyerPurchaseRequestsLoadVersion += 1;
+      loadingBuyerPurchaseRequests = false;
       message = initialMessage;
       messageKind = "success";
       render();
