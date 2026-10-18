@@ -779,22 +779,11 @@ button:disabled {
   object-fit: cover;
 }
 
-.purchase-card-prices {
-  display: flex;
+.purchase-card-listing-price {
   flex: 0 0 auto;
-  align-items: baseline;
-  gap: 6px;
-  white-space: nowrap;
-}
-
-.purchase-card-prices strong {
-  color: #26352d;
-  font-size: 0.75rem;
-}
-
-.purchase-card-prices s {
   color: #64706b;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
+  white-space: nowrap;
 }
 
 .purchase-card-time {
@@ -1646,10 +1635,6 @@ button:disabled {
   .purchase-card-listing-thumb {
     width: 24px;
     height: 24px;
-  }
-
-  .purchase-card-prices {
-    gap: 4px;
   }
 
   .conversation-listing-preview {

@@ -397,9 +397,9 @@ test("a family can send a prefilled offer and find its conversation in purchases
   await expect(purchaseCard.locator(".purchase-card-avatar")).toHaveText("S");
   await expect(purchaseCard.locator(".purchase-card-preview")).toHaveText("Offre : 3 €");
   await expect(purchaseCard.locator(".purchase-card-listing-title")).toHaveText("Pull en laine");
-  const requestPrices = page.locator(".purchase-card-prices");
-  await expect(requestPrices.getByText("3 € proposés")).toBeVisible();
-  await expect(requestPrices.locator("s")).toHaveText("4 €");
+  const listingPrice = purchaseCard.locator(".purchase-card-listing-price");
+  await expect(listingPrice).toHaveText("4 €");
+  await expect(listingPrice.locator("s")).toHaveCount(0);
   await expect(purchaseCard.locator(".purchase-card-listing-thumb")).toBeVisible();
   await expect(purchaseCard.locator(".purchase-card-time")).toBeVisible();
   await expect(purchaseCard).toHaveCSS("grid-template-columns", /44px/);
@@ -598,7 +598,8 @@ test("a free listing sends a donation request instead of an offer", async ({ pag
   const purchaseCard = page.locator(".purchase-card");
   await expect(purchaseCard.locator(".purchase-card-contact")).toHaveText("S. V.");
   await expect(purchaseCard.locator(".purchase-card-listing-title")).toHaveText("Livre à donner");
-  await expect(purchaseCard.locator(".purchase-card-prices")).toHaveText("Demande de don");
+  await expect(purchaseCard.locator(".purchase-card-preview")).toHaveText("Demande de don");
+  await expect(purchaseCard.locator(".purchase-card-listing-price")).toHaveText("Don");
   await purchaseCard.click();
   await expect(page.locator(".conversation-offer .offer-state")).toHaveText("En attente");
   expect(createdRequests).toHaveLength(1);

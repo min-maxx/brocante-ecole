@@ -692,12 +692,6 @@ export function createMarketplace({
     </main>`;
   }
 
-  function requestPriceMarkup(request) {
-    return request.type === "donation"
-      ? `<span class="purchase-card-prices"><strong>Demande de don</strong></span>`
-      : `<span class="purchase-card-prices"><strong>${Number(request.amount)} € proposés</strong><s>${escapeHtml(priceLabel(request.listingPrice))}</s></span>`;
-  }
-
   function requestStatusLabel(request) {
     const statusLabels = {
       pending: "En attente",
@@ -730,7 +724,7 @@ export function createMarketplace({
         <span class="purchase-card-item">
           <span class="purchase-card-listing-thumb">${photoMarkup}</span>
           <span class="purchase-card-listing-title">${escapeHtml(request.listingTitle)}</span>
-          ${requestPriceMarkup(request)}
+          <span class="purchase-card-listing-price">${escapeHtml(priceLabel(request.listingPrice))}</span>
         </span>
       </span>
       ${timeMarkup}
