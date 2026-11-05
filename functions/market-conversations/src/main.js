@@ -1,4 +1,4 @@
-import { Client, Databases, ID, Permission, Role, Users } from "node-appwrite";
+import { Client, Databases, ID, Permission, Query, Role, Users } from "node-appwrite";
 import { createMarketplaceConversationHandler } from "./handler.js";
 
 const REQUIRED_ENVIRONMENT = [
@@ -43,37 +43,117 @@ function createServices(req) {
   const requestsCollectionId = process.env.APPWRITE_REQUESTS_COLLECTION_ID;
   const messagesCollectionId = process.env.APPWRITE_MESSAGES_COLLECTION_ID;
 
+  async function listDocuments(collectionId, filters) {
+    const documents = [];
+    let cursor;
+    do {
+      const queries = [...filters, Query.limit(100)];
+      if (cursor) queries.push(Query.cursorAfter(cursor));
+      const result = await databases.listDocuments({
+        databaseId,
+        collectionId,
+        queries,
+      });
+      documents.push(...result.documents);
+      cursor = result.documents.length === 100 ? result.documents.at(-1).$id : "";
+    } while (cursor);
+    return documents;
+  }
+
   return {
+    createTransaction: () => databases.createTransaction(),
+    commitTransaction: (transactionId) => databases.updateTransaction({ transactionId, commit: true }),
+    rollbackTransaction: (transactionId) => databases.updateTransaction({ transactionId, rollback: true }),
     getListing: (listingId) => databases.getDocument({
       databaseId,
       collectionId: listingsCollectionId,
       documentId: listingId,
     }),
+    getBuyerRequestForListing: async (listingId, buyerId) => {
+      const result = await databases.listDocuments({
+        databaseId,
+        collectionId: requestsCollectionId,
+        queries: [
+          Query.equal("listingId", listingId),
+          Query.equal("buyerId", buyerId),
+          Query.limit(1),
+        ],
+      });
+      return result.documents[0] || null;
+    },
     getRequest: (requestId) => databases.getDocument({
       databaseId,
       collectionId: requestsCollectionId,
       documentId: requestId,
     }),
+    listRequestsByListing: (listingId) => listDocuments(
+      requestsCollectionId,
+      [Query.equal("listingId", listingId)],
+    ),
+    listMessagesByRequest: (requestId) => listDocuments(
+      messagesCollectionId,
+      [Query.equal("requestId", requestId)],
+    ),
     getUserInitials: async (userId) => familyInitials(await users.get({ userId })),
-    createRequest: ({ data, participants }) => databases.createDocument({
+    createRequest: ({ data, participants, transactionId }) => databases.createDocument({
       databaseId,
       collectionId: requestsCollectionId,
       documentId: ID.unique(),
       data,
       permissions: participantPermissions(participants),
+      ...(transactionId ? { transactionId } : {}),
     }),
-    createMessage: ({ requestId, senderId, content, participants }) => databases.createDocument({
+    createMessage: ({ requestId, senderId, content, kind = "message", amount, status, participants, transactionId }) => {
+      const data = { requestId, senderId, content, kind };
+      if (amount !== undefined) data.amount = amount;
+      if (status !== undefined) data.status = status;
+      return databases.createDocument({
+        databaseId,
+        collectionId: messagesCollectionId,
+        documentId: ID.unique(),
+        data,
+        permissions: participantPermissions(participants),
+        ...(transactionId ? { transactionId } : {}),
+      });
+    },
+    deleteMessage: (messageId) => databases.deleteDocument({
       databaseId,
       collectionId: messagesCollectionId,
-      documentId: ID.unique(),
-      data: { requestId, senderId, content },
-      permissions: participantPermissions(participants),
+      documentId: messageId,
     }),
     updateRequestLastMessage: (requestId, lastMessage) => databases.updateDocument({
       databaseId,
       collectionId: requestsCollectionId,
       documentId: requestId,
       data: { lastMessage },
+    }),
+    updateRequestStatus: (requestId, status, transactionId) => databases.updateDocument({
+      databaseId,
+      collectionId: requestsCollectionId,
+      documentId: requestId,
+      data: { status },
+      ...(transactionId ? { transactionId } : {}),
+    }),
+    updateRequestOffer: (requestId, data, transactionId) => databases.updateDocument({
+      databaseId,
+      collectionId: requestsCollectionId,
+      documentId: requestId,
+      data,
+      ...(transactionId ? { transactionId } : {}),
+    }),
+    updateMessageStatus: (messageId, status, transactionId) => databases.updateDocument({
+      databaseId,
+      collectionId: messagesCollectionId,
+      documentId: messageId,
+      data: { status },
+      ...(transactionId ? { transactionId } : {}),
+    }),
+    updateListingStatus: (listingId, status, transactionId) => databases.updateDocument({
+      databaseId,
+      collectionId: listingsCollectionId,
+      documentId: listingId,
+      data: { status },
+      ...(transactionId ? { transactionId } : {}),
     }),
     deleteRequest: (requestId) => databases.deleteDocument({
       databaseId,

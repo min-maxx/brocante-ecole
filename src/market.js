@@ -298,6 +298,8 @@ export function createMarketplace({
   let loading = false;
   let publishing = false;
   let submittingRequest = false;
+  let submittingDecision = false;
+  let submittingOffer = false;
   let requestDraft = null;
   let loadingBuyerPurchaseRequests = false;
   let buyerPurchaseRequestsLoaded = false;
@@ -549,6 +551,7 @@ export function createMarketplace({
   }
 
   function matchesListingFilters(listing) {
+    if (listing.status && listing.status !== "available") return false;
     if (selectedCategory && listing.category !== selectedCategory) return false;
     if (selectedConditions.length && !selectedConditions.includes(listing.condition)) return false;
     return Object.entries(selectedItemFilters).every(([key, value]) => {
@@ -661,7 +664,9 @@ export function createMarketplace({
                   <p class="purchase-request-note">Vous avez déjà une conversation pour cette annonce.</p>
                   <button class="button-light" type="button" data-action="open-existing-conversation" data-request-id="${escapeHtml(existingRequest.$id)}">Voir la conversation</button>
                 </div>`
-              : requestFormMarkup;
+              : listing.status && listing.status !== "available"
+                ? `<p class="purchase-request-note">Cette annonce n’est plus disponible.</p>`
+                : requestFormMarkup;
 
     return `<main class="market-main">
       <button class="button-light listing-detail-back" type="button" data-action="back-to-list">← Retour aux annonces</button>
@@ -738,32 +743,42 @@ export function createMarketplace({
     const otherFamily = role === "sales"
       ? request.buyerInitials || "Famille acheteuse"
       : request.sellerInitials || "Famille vendeuse";
-    const offerLabel = request.type === "donation" ? "Demande de don" : `Offre : ${Number(request.amount)} €`;
-    const offerIsMine = request.buyerId === user?.$id;
     const offerTime = Date.parse(request.$createdAt);
     const listing = listings.find((item) => item.$id === request.listingId);
     const listingPreview = [
       priceLabel(request.listingPrice),
       listing ? conditionLabel(listing.condition) : "",
     ].filter(Boolean).join(" · ");
+    const hasOfferEvents = conversationMessages.some((item) => ["offer", "donation"].includes(item.kind));
     const events = [
-      {
-        kind: "offer",
+      ...(!hasOfferEvents ? [{
         createdAt: Number.isNaN(offerTime) ? 0 : offerTime,
-        markup: `<article class="conversation-message conversation-offer${offerIsMine ? " mine" : ""}">
-          <strong class="offer-amount">${escapeHtml(offerLabel)}</strong>
+        markup: `<article class="conversation-message conversation-offer${request.buyerId === user?.$id ? " mine" : ""}">
+          <strong class="offer-amount">${request.type === "donation" ? "Demande de don" : `Offre : ${Number(request.amount)} €`}</strong>
           <span class="offer-state">${escapeHtml(requestStatusLabel(request))}</span>
           ${Number.isNaN(offerTime) ? "" : `<small><time datetime="${new Date(offerTime).toISOString()}">${escapeHtml(relativeTimeLabel(request.$createdAt))}</time></small>`}
         </article>`,
-      },
-      ...conversationMessages.map((item) => ({
-        kind: "message",
-        createdAt: Date.parse(item.$createdAt) || 0,
-        markup: `<article class="conversation-message${item.senderId === user?.$id ? " mine" : ""}">
-          <span>${item.senderId === user?.$id ? "Vous" : escapeHtml(otherFamily)}</span>
-          <p>${escapeHtml(item.content)}</p>
-        </article>`,
-      })),
+      }] : []),
+      ...conversationMessages.map((item) => {
+        const createdAt = Date.parse(item.$createdAt) || 0;
+        if (["offer", "donation"].includes(item.kind)) {
+          return {
+            createdAt,
+            markup: `<article class="conversation-message conversation-offer${item.senderId === user?.$id ? " mine" : ""}">
+              <strong class="offer-amount">${item.kind === "donation" ? "Demande de don" : `Offre : ${Number(item.amount)} €`}</strong>
+              <span class="offer-state">${escapeHtml(requestStatusLabel(item))}</span>
+              ${createdAt ? `<small><time datetime="${new Date(createdAt).toISOString()}">${escapeHtml(relativeTimeLabel(item.$createdAt))}</time></small>` : ""}
+            </article>`,
+          };
+        }
+        return {
+          createdAt,
+          markup: `<article class="conversation-message${item.senderId === user?.$id ? " mine" : ""}">
+            <span>${item.senderId === user?.$id ? "Vous" : escapeHtml(otherFamily)}</span>
+            <p>${escapeHtml(item.content)}</p>
+          </article>`,
+        };
+      }),
     ];
     const eventsMarkup = events
       .sort((left, right) => left.createdAt - right.createdAt)
@@ -772,6 +787,28 @@ export function createMarketplace({
     const photoMarkup = request.listingPhotoId
       ? `<img src="${escapeHtml(getListingPhotoUrl(storage, photosBucketId, request.listingPhotoId))}" alt="">`
       : `<span aria-hidden="true">📦</span>`;
+    const sellerCanRespond = request.sellerId === user?.$id && request.status === "pending";
+    const decisionLabel = request.type === "donation" ? "la demande de don" : "l’offre";
+    const decisionMarkup = sellerCanRespond
+      ? `<div class="conversation-offer-actions" role="group" aria-label="Répondre à ${decisionLabel}">
+          <button class="button-primary" type="button" data-action="respond-to-offer" data-decision="accepted" data-request-id="${escapeHtml(request.$id)}"${submittingDecision ? " disabled" : ""}>${submittingDecision ? "Mise à jour…" : `Accepter ${request.type === "donation" ? "la demande" : "l’offre"}`}</button>
+          <button class="button-light" type="button" data-action="respond-to-offer" data-decision="rejected" data-request-id="${escapeHtml(request.$id)}"${submittingDecision ? " disabled" : ""}>Refuser</button>
+        </div>`
+      : "";
+    const canRenewOffer = request.type === "offer"
+      && request.buyerId === user?.$id
+      && request.status === "rejected"
+      && listing
+      && (!listing.status || listing.status === "available");
+    const renewOfferMarkup = canRenewOffer
+      ? `<form class="purchase-request-form conversation-renew-offer" id="renew-offer-form" aria-busy="${submittingOffer}">
+          <h2>Proposer une nouvelle offre</h2>
+          <label class="form-field" for="renew-offer-amount">Votre offre
+            <input id="renew-offer-amount" name="amount" type="number" min="1" step="1" value="${Number(request.amount)}" required${submittingOffer ? " disabled" : ""}>
+          </label>
+          <button class="button-primary" type="submit"${submittingOffer ? " disabled" : ""}>${submittingOffer ? "Envoi en cours…" : "Envoyer une nouvelle offre"}</button>
+        </form>`
+      : "";
 
     return `<section class="conversation-view">
       <button class="button-light conversation-back" type="button" data-action="close-conversation">← ${role === "sales" ? "Mes ventes" : "Mes achats"}</button>
@@ -792,6 +829,8 @@ export function createMarketplace({
         <div class="conversation-events" aria-label="Messages et offres de la conversation" aria-live="polite">
           ${loadingConversationMessages ? `<p role="status">Chargement de la conversation…</p>` : eventsMarkup}
         </div>
+        ${decisionMarkup}
+        ${renewOfferMarkup}
         <form class="conversation-message-form" id="conversation-message-form">
           <label class="form-field" for="conversation-message-input">Votre message
             <textarea id="conversation-message-input" name="content" rows="3" maxlength="1000" required${submittingMessage ? " disabled" : ""}></textarea>
@@ -1195,12 +1234,20 @@ export function createMarketplace({
     message = "";
     render();
     try {
-      const result = await databases.listDocuments(databaseId, messagesCollectionId, [
-        Query.equal("requestId", requestId),
-        Query.orderAsc("$createdAt"),
-        Query.limit(100),
-      ]);
-      conversationMessages = result.documents.sort((left, right) =>
+      const documents = [];
+      let cursor = "";
+      do {
+        const queries = [
+          Query.equal("requestId", requestId),
+          Query.orderAsc("$createdAt"),
+          Query.limit(100),
+        ];
+        if (cursor) queries.push(Query.cursorAfter(cursor));
+        const result = await databases.listDocuments(databaseId, messagesCollectionId, queries);
+        documents.push(...result.documents);
+        cursor = result.documents.length === 100 ? result.documents.at(-1).$id : "";
+      } while (cursor);
+      conversationMessages = documents.sort((left, right) =>
         String(left.$createdAt || "").localeCompare(String(right.$createdAt || ""))
       );
       loadingConversationMessages = false;
@@ -1268,8 +1315,11 @@ export function createMarketplace({
       view = "purchases";
       selectedConversationId = request.$id;
       conversationMessages = result.messages;
+      if (result.existing) await loadConversationMessages(request.$id);
       requestDraft = null;
-      message = type === "donation" ? "Votre demande de don a été envoyée." : "Votre offre a été envoyée.";
+      message = result.existing
+        ? "Vous avez déjà une conversation pour cette annonce."
+        : type === "donation" ? "Votre demande de don a été envoyée." : "Votre offre a été envoyée.";
       messageKind = "success";
     } catch (error) {
       console.error("Impossible d’envoyer la demande d’achat ou de don.", error);
@@ -1279,6 +1329,109 @@ export function createMarketplace({
       messageKind = "error";
     } finally {
       submittingRequest = false;
+      render();
+    }
+  }
+
+  async function respondToOffer(requestId, decision) {
+    if (submittingDecision || !selectedConversationId || requestId !== selectedConversationId) return;
+    const request = purchaseRequests.find((item) => item.$id === requestId);
+    if (!request || request.sellerId !== user?.$id || request.status !== "pending") return;
+
+    submittingDecision = true;
+    message = "";
+    render();
+    try {
+      const result = await executeMarketFunction({
+        action: "respond-to-offer",
+        requestId,
+        decision,
+      });
+      if (
+        !result.request?.$id
+        || !Array.isArray(result.requests)
+        || !result.listing?.$id
+        || !Array.isArray(result.messages)
+      ) {
+        throw new Error("La réponse du service de conversation est incomplète.");
+      }
+      const updates = new Map(result.requests.map((item) => [item.$id, item]));
+      purchaseRequests = purchaseRequests.map((item) => updates.get(item.$id) || item);
+      buyerPurchaseRequests = sortPurchaseRequests(
+        buyerPurchaseRequests.map((item) => updates.get(item.$id) || item),
+      );
+      listings = listings.map((item) =>
+        item.$id === result.listing.$id ? { ...item, status: result.listing.status } : item
+      );
+      const updatedMessages = new Map(result.messages.map((item) => [item.$id, item]));
+      conversationMessages = [
+        ...conversationMessages.map((item) => updatedMessages.get(item.$id) || item),
+        ...result.messages.filter((item) => !conversationMessages.some((existing) => existing.$id === item.$id)),
+      ].sort((left, right) =>
+        String(left.$createdAt || "").localeCompare(String(right.$createdAt || ""))
+      );
+      message = decision === "accepted"
+        ? "La demande est acceptée et l’annonce est réservée."
+        : "La demande est refusée. L’acheteur peut proposer une nouvelle offre dans cette conversation.";
+      messageKind = "success";
+    } catch (error) {
+      console.error("Impossible de répondre à l’offre ou à la demande de don.", error);
+      message = "La réponse n’a pas pu être enregistrée. Vérifiez votre connexion et réessayez.";
+      messageKind = "error";
+    } finally {
+      submittingDecision = false;
+      render();
+    }
+  }
+
+  async function renewOffer(amount) {
+    if (submittingOffer || !selectedConversationId) return;
+    const request = purchaseRequests.find((item) => item.$id === selectedConversationId);
+    if (
+      !request
+      || request.type !== "offer"
+      || request.buyerId !== user?.$id
+      || request.status !== "rejected"
+      || !Number.isSafeInteger(amount)
+      || amount < 1
+    ) {
+      setMessage("Saisissez une offre en euros sous la forme d’un nombre entier supérieur à zéro.", "error");
+      return;
+    }
+
+    submittingOffer = true;
+    message = "";
+    render();
+    try {
+      const result = await executeMarketFunction({
+        action: "renew-offer",
+        requestId: request.$id,
+        amount,
+      });
+      if (!result.request?.$id || !Array.isArray(result.messages)) {
+        throw new Error("La réponse du service de conversation est incomplète.");
+      }
+      purchaseRequests = purchaseRequests.map((item) =>
+        item.$id === result.request.$id ? result.request : item
+      );
+      buyerPurchaseRequests = sortPurchaseRequests(buyerPurchaseRequests.map((item) =>
+        item.$id === result.request.$id ? result.request : item
+      ));
+      const updatedMessages = new Map(result.messages.map((item) => [item.$id, item]));
+      conversationMessages = [
+        ...conversationMessages.map((item) => updatedMessages.get(item.$id) || item),
+        ...result.messages.filter((item) => !conversationMessages.some((existing) => existing.$id === item.$id)),
+      ].sort((left, right) =>
+        String(left.$createdAt || "").localeCompare(String(right.$createdAt || ""))
+      );
+      message = "Votre nouvelle offre a été envoyée dans cette conversation.";
+      messageKind = "success";
+    } catch (error) {
+      console.error("Impossible d’envoyer une nouvelle offre.", error);
+      message = "L’envoi de votre nouvelle offre a échoué. Vérifiez votre connexion et réessayez.";
+      messageKind = "error";
+    } finally {
+      submittingOffer = false;
       render();
     }
   }
@@ -1361,6 +1514,7 @@ export function createMarketplace({
         price: Number(draft.price),
         sellerId: user.$id,
         sellerInitials: sellerInitialsFromEmail(user.email),
+        status: "available",
         photoIds: uploadedFileIds,
       };
       const listing = await databases.createDocument(
@@ -1429,6 +1583,9 @@ export function createMarketplace({
         break;
       case "open-conversation":
         await openConversation(button.dataset.requestId);
+        break;
+      case "respond-to-offer":
+        await respondToOffer(button.dataset.requestId, button.dataset.decision);
         break;
       case "open-existing-conversation": {
         const requestId = button.dataset.requestId;
@@ -1574,6 +1731,13 @@ export function createMarketplace({
       createPurchaseRequest(selectedListingId, type, amount, String(data.get("message") || "")).catch((error) => {
         console.error("Une offre ou une demande de don n’a pas pu être envoyée.", error);
         setMessage("L’envoi de votre demande a échoué. Vérifiez votre connexion et réessayez.", "error");
+      });
+      return;
+    }
+    if (form.id === "renew-offer-form") {
+      renewOffer(Number(data.get("amount"))).catch((error) => {
+        console.error("Une nouvelle offre n’a pas pu être envoyée.", error);
+        setMessage("L’envoi de votre nouvelle offre a échoué. Vérifiez votre connexion et réessayez.", "error");
       });
       return;
     }

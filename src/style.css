@@ -944,6 +944,26 @@ button:disabled {
   min-width: 110px;
 }
 
+.conversation-offer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 0 20px 18px;
+}
+
+.conversation-renew-offer {
+  margin: 0 20px 18px;
+  padding: 14px;
+  border: 1px solid #d5ded0;
+  border-radius: 12px;
+  background: #f8faf5;
+}
+
+.conversation-renew-offer h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
 .market-empty {
   padding: 55px 20px;
   border: 1px dashed #cbd4c8;

@@ -18,6 +18,7 @@ export const LISTING_ATTRIBUTES = [
   { key: "language", type: "string", size: 40, required: false },
   { key: "sellerId", type: "string", size: 36, required: false },
   { key: "sellerInitials", type: "string", size: 20, required: false },
+  { key: "status", type: "string", size: 20, required: false },
 ];
 
 export const PURCHASE_REQUEST_ATTRIBUTES = [
@@ -39,16 +40,21 @@ export const CONVERSATION_MESSAGE_ATTRIBUTES = [
   { key: "requestId", type: "string", size: 36, required: true },
   { key: "senderId", type: "string", size: 36, required: true },
   { key: "content", type: "string", size: 1000, required: true },
+  { key: "kind", type: "string", size: 20, required: false },
+  { key: "amount", type: "integer", required: false },
+  { key: "status", type: "string", size: 20, required: false },
 ];
 
 const COLLECTION_PERMISSIONS = ['read("users")', 'create("users")'];
 const PRIVATE_COLLECTION_PERMISSIONS = [];
 const BUCKET_PERMISSIONS = ['read("users")', 'create("users")'];
-const OPTIONAL_LISTING_ATTRIBUTES = new Set(["subcategory", "shoeSize", "author", "language", "sellerId", "sellerInitials"]);
+const OPTIONAL_LISTING_ATTRIBUTES = new Set(["subcategory", "shoeSize", "author", "language", "sellerId", "sellerInitials", "status"]);
 const OPTIONAL_PURCHASE_REQUEST_ATTRIBUTES = new Set(["buyerInitials", "lastMessage"]);
+const OPTIONAL_CONVERSATION_MESSAGE_ATTRIBUTES = new Set(["kind", "amount", "status"]);
 const PURCHASE_REQUEST_INDEXES = [
   { key: "by_buyer", type: "key", attributes: ["buyerId"] },
   { key: "by_seller", type: "key", attributes: ["sellerId"] },
+  { key: "by_buyer_listing", type: "unique", attributes: ["buyerId", "listingId"] },
 ];
 const CONVERSATION_MESSAGES_INDEX = { key: "by_request", type: "key", attributes: ["requestId"] };
 
@@ -242,6 +248,28 @@ async function verifyConversationMessageCollection(collection, { databases, data
   const existingAttributes = new Map((collection.attributes ?? []).map((attribute) => [attribute.key, attribute]));
   for (const expected of CONVERSATION_MESSAGE_ATTRIBUTES) {
     const actual = existingAttributes.get(expected.key);
+    if (!actual && OPTIONAL_CONVERSATION_MESSAGE_ATTRIBUTES.has(expected.key)) {
+      if (expected.type === "string") {
+        await databases.createStringAttribute({
+          databaseId,
+          collectionId,
+          key: expected.key,
+          size: expected.size,
+          required: false,
+        });
+      } else if (expected.type === "integer") {
+        await databases.createIntegerAttribute({
+          databaseId,
+          collectionId,
+          key: expected.key,
+          required: false,
+        });
+      } else {
+        throw new Error(`Le type « ${expected.type} » de l’attribut facultatif « ${expected.key} » n’est pas pris en charge.`);
+      }
+      log(`Attribut facultatif ajouté : ${expected.key}`);
+      continue;
+    }
     const matches = actual
       && actual.type === expected.type
       && actual.size === expected.size
