@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "test": "node --test functions/create-family-account/test/*.test.js provisioning/test/*.test.js",
+    "test": "node --test functions/*/test/*.test.js provisioning/test/*.test.js",
     "test:e2e": "playwright test --config=playwright.config.js",
     "test:e2e:config": "playwright test --config=playwright.missing-config.config.js"
   },

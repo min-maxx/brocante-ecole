@@ -8,6 +8,7 @@ Le marché de petites annonces de l’école : les familles peuvent y proposer e
 ## 🧭 Repères
 
 - [Comment fonctionne l’inscription](#inscription)
+- [Échanger dans une conversation](#conversations-marche)
 - [Configurer Appwrite](#configuration-appwrite)
 - [Configurer les annonces et les photos](#configuration-annonces-photos)
 - [Développer et tester](#developpement-tests)
@@ -49,9 +50,9 @@ Le navigateur envoie l’adresse à une Appwrite Function publique. Après ouver
 <a id="configuration-appwrite"></a>
 ## ⚙️ Configurer Appwrite
 
-### 1. Créer le projet et enregistrer les plateformes Web
+### 1. Créer le projet
 
-Créez un projet Appwrite Cloud dans la région Frankfurt (`fra`). Dans la console, ouvrez **Overview → Integrations → Add platform → Web App**. Dans le champ **Hostname**, ajoutez le domaine de production et `localhost` pour le développement. Saisissez le hostname sans `https://`, sans port et sans chemin, par exemple `brocante-esmj.appwrite.network` et `localhost`.
+Créez un projet Appwrite Cloud dans la région Frankfurt (`fra`). Le provisionnement enregistre automatiquement comme plateformes Web le hostname de `APPWRITE_SIGNUP_CALLBACK_URL` et `localhost`.
 
 ### 2. Configurer les méthodes de connexion
 
@@ -68,45 +69,21 @@ Créez une base de données et une table privée pour les adresses autorisées :
 
 > Ne placez jamais d’adresses de familles dans le code source ni dans ce dépôt.
 
-### 4. Déployer la fonction de création de compte
+### 4. Provisionner les Functions Appwrite
 
-Créez une fonction **Node.js 22** nommée `create-family-account`, avec cette configuration :
+Le script `npm run setup --prefix provisioning` crée et déploie automatiquement `create-family-account` et `market-conversations`. Il configure aussi leurs permissions d’exécution, leurs portées serveur, leurs variables et les plateformes Web nécessaires. Il attend que chaque déploiement soit actif.
 
-| Réglage | Valeur |
-| --- | --- |
-| Répertoire racine | `functions/create-family-account` |
-| Point d’entrée | `src/main.js` |
-| Commande de construction | `npm install` |
+Pour `create-family-account`, le script reprend `APPWRITE_ALLOWLIST_TABLE_ID` et `APPWRITE_SIGNUP_CALLBACK_URL` depuis la Function déjà présente si ces valeurs ne sont pas renseignées dans `provisioning/.env`. Pour une première installation, ajoutez-les à ce fichier. La table privée des adresses autorisées et ses données restent gérées séparément.
 
-Dans **Functions → `create-family-account` → Security → Permissions**, autorisez **All guests** afin que les visiteurs non connectés puissent appeler la fonction. Elle vérifie elle-même l’autorisation pour chaque action. **Après toute modification de cette permission, redéployez la fonction** pour appliquer le changement au déploiement actif.
+<a id="conversations-marche"></a>
+## 💬 Échanger dans une conversation
 
-### 5. Limiter les portées et configurer la fonction
-
-Limitez les portées de la clé éphémère aux permissions suivantes :
-
-| Portée | Utilisation |
-| --- | --- |
-| `rows.read` | Lire les lignes de la liste d’adresses autorisées |
-| `users.read` | Vérifier les comptes |
-| `users.write` | Créer et mettre à jour les comptes |
-
-Configurez ces variables dans la fonction :
-
-| Variable | Description |
-| --- | --- |
-| `APPWRITE_DATABASE_ID` | Identifiant de la base de données |
-| `APPWRITE_ALLOWLIST_TABLE_ID` | Identifiant de la table privée des adresses autorisées |
-| `APPWRITE_SIGNUP_CALLBACK_URL` | URL complète du site de retour, par exemple `https://brocante-esmj.appwrite.network/` |
-| `APPWRITE_FUNCTION_API_ENDPOINT` | Fournie par Appwrite |
-| `APPWRITE_FUNCTION_PROJECT_ID` | Fournie par Appwrite |
-| `APPWRITE_FUNCTION_API_KEY` | Fournie par Appwrite |
-
-Le hostname de `APPWRITE_SIGNUP_CALLBACK_URL` (par exemple `brocante-esmj.appwrite.network`) doit être enregistré comme plateforme Web à l’étape 1 **dans le même projet Appwrite que la fonction**. Sans cela, Appwrite rejettera le lien de vérification.
+`market-conversations` est réservé aux utilisateurs connectés. Le provisionnement configure ses portées serveur (`databases.read`, `documents.read`, `documents.write`, `users.read`) et les variables Appwrite nécessaires. La Function vérifie l’annonce et l’identité de l’appelant, puis crée les demandes et messages avec un accès de lecture réservé aux deux familles participantes.
 
 <a id="configuration-annonces-photos"></a>
-## 🗂️ Provisionner les annonces et les photos
+## 🗂️ Provisionner les annonces, les demandes, les conversations et les photos
 
-Les ressources du marché se créent depuis le répertoire isolé [`provisioning/`](./provisioning/), à l’écart du code de l’application. Le script utilise le Server SDK Appwrite, crée les ressources manquantes et ajoute les attributs facultatifs de catégorie manquants aux collections `listings` existantes. Si une ressource existante a un schéma incompatible ou des permissions incorrectes, il s’arrête avec une erreur plutôt que de la modifier ou supprimer. Consultez le [guide détaillé du provisionnement](./provisioning/README.md) pour créer la clé API et configurer l’outil.
+Les ressources du marché et ses deux Functions se provisionnent depuis le répertoire isolé [`provisioning/`](./provisioning/), à l’écart du code de l’application. Le script utilise le Server SDK Appwrite, crée les ressources manquantes, ajoute les attributs facultatifs attendus et déploie les sources présentes dans `functions/`. Il migre également l’ancienne permission de création de `requests` vers une collection sans permission générale, sans modifier les ACL des documents existants. Si le schéma ou les permissions d’une autre ressource sont incompatibles, il s’arrête explicitement. Consultez le [guide détaillé du provisionnement](./provisioning/README.md).
 
 ```sh
 cp provisioning/.env.example provisioning/.env
@@ -115,7 +92,7 @@ npm install --prefix provisioning
 npm run setup --prefix provisioning
 ```
 
-`provisioning/.env` est ignoré par Git. Créez une clé API Appwrite temporaire avec les portées de lecture et d’écriture nécessaires sur les bases, collections, attributs et buckets ; ne mettez jamais cette clé dans `.env.local`, dans une variable `VITE_` ou dans le dépôt.
+`provisioning/.env` est ignoré par Git. Créez une clé API Appwrite temporaire avec les portées de lecture/écriture sur les bases, collections, attributs, index et buckets, ainsi que `functions.read`, `functions.write`, `platforms.read` et `platforms.write`. Le script a besoin des deux portées `platforms.*` pour vérifier et enregistrer les plateformes Web. Ce sont les seuls droits Appwrite à ajouter manuellement ; le script configure les droits d’exécution et les portées serveur des deux Functions. Ne mettez jamais cette clé dans `.env.local`, dans une variable `VITE_` ou dans le dépôt.
 
 | Variable | Valeur |
 | --- | --- |
@@ -124,7 +101,11 @@ npm run setup --prefix provisioning
 | `APPWRITE_API_KEY` | Clé de provisionnement secrète à durée de vie limitée |
 | `APPWRITE_DATABASE_ID` | Identifiant de la base à créer ou réutiliser |
 | `APPWRITE_LISTINGS_COLLECTION_ID` | Identifiant de la collection, prérempli à `listings` dans l’exemple |
+| `APPWRITE_REQUESTS_COLLECTION_ID` | Identifiant de la collection des demandes, prérempli à `requests` dans l’exemple |
+| `APPWRITE_MESSAGES_COLLECTION_ID` | Identifiant de la collection des messages, prérempli à `messages` dans l’exemple |
 | `APPWRITE_LISTING_PHOTOS_BUCKET_ID` | Identifiant du bucket, prérempli à `listing-photos` dans l’exemple |
+
+Les collections `requests` et `messages` sont sécurisées par document et n’accordent aucune permission au niveau collection. La Function crée chaque document avec un accès en lecture réservé aux deux familles participantes ; les modifications et l’envoi de messages passent par cette Function.
 
 Le script crée la base si elle n’existe pas, puis la collection `listings` avec la **sécurité des documents activée** et le bucket `listing-photos` avec la **sécurité des fichiers activée**. Il configure la lecture et la création pour les utilisateurs connectés ; l’application donne ensuite les droits de mise à jour et de suppression au propriétaire de chaque annonce et de chaque photo. Si la base est déjà utilisée pour la liste privée d’adresses autorisées, renseignez exactement le même `APPWRITE_DATABASE_ID` que celui configuré dans la fonction d’inscription.
 
@@ -146,9 +127,39 @@ Le script crée la base si elle n’existe pas, puis la collection `listings` av
 | `shoeSize` | Entier | Non |
 | `author` | Chaîne, 70 caractères | Non |
 | `language` | Chaîne, 40 caractères | Non |
+| `sellerId` | Chaîne, 36 caractères | Non |
 | `sellerInitials` | Chaîne, 20 caractères | Non |
 
-Le formulaire envoie toujours `description` et `brand`. Si leur valeur est facultative et omise, il envoie une chaîne vide afin que les attributs requis soient présents. `sellerInitials` contient les initiales extraites de la partie locale de l’adresse e-mail du vendeur, sans enregistrer ni afficher son adresse complète. Le provisionnement ajoute ce nouvel attribut facultatif aux collections `listings` existantes. `subcategory` stocke le genre ou le type pour toutes les catégories; les listes sont regroupées par famille et triées alphabétiquement à l’intérieur de chaque groupe, avec « Autre » en dernier. Pour les types de chaussures, les âges sélectionnés limitent les pointures proposées; la pointure choisie est obligatoire et enregistrée dans `shoeSize`. Les autres vêtements conservent les équivalences de taille en centimètres. Les plages contiguës sont regroupées pour une lecture plus rapide dans les annonces. Les classes du matériel scolaire sont calculées à partir des âges et ne sont pas saisies ni enregistrées séparément.
+Le formulaire envoie toujours `description` et `brand`. Si leur valeur est facultative et omise, il envoie une chaîne vide afin que les attributs requis soient présents. `sellerId` identifie le compte vendeur pour limiter l’accès à ses demandes; le provisionnement ajoute cet attribut facultatif aux collections `listings` existantes. `sellerInitials` contient les initiales extraites de la partie locale de l’adresse e-mail du vendeur, sans enregistrer ni afficher son adresse complète. `subcategory` stocke le genre ou le type pour toutes les catégories; les listes sont regroupées par famille et triées alphabétiquement à l’intérieur de chaque groupe, avec « Autre » en dernier. Pour les types de chaussures, les âges sélectionnés limitent les pointures proposées; la pointure choisie est obligatoire et enregistrée dans `shoeSize`. Les autres vêtements conservent les équivalences de taille en centimètres. Les plages contiguës sont regroupées pour une lecture plus rapide dans les annonces. Les classes du matériel scolaire sont calculées à partir des âges et ne sont pas saisies ni enregistrées séparément.
+
+### Schéma de la collection `requests`
+
+| Attribut | Type et limite | Requis |
+| --- | --- | :---: |
+| `listingId` | Chaîne, 36 caractères | Oui |
+| `listingTitle` | Chaîne, 70 caractères | Oui |
+| `listingPrice` | Entier | Oui |
+| `listingPhotoId` | Chaîne, 36 caractères | Non |
+| `sellerInitials` | Chaîne, 20 caractères | Non |
+| `buyerInitials` | Chaîne, 20 caractères | Non |
+| `buyerId` | Chaîne, 36 caractères | Oui |
+| `sellerId` | Chaîne, 36 caractères | Oui |
+| `type` | Chaîne, 20 caractères (`offer` ou `donation`) | Oui |
+| `amount` | Entier (0 pour une demande de don) | Oui |
+| `status` | Chaîne, 20 caractères (`pending`, `accepted` ou `rejected`) | Oui |
+| `lastMessage` | Chaîne, 1 000 caractères | Non |
+
+Les demandes sont lues uniquement par les deux familles participantes. Les index `by_buyer` et `by_seller` alimentent respectivement « Mes achats » et « Mes ventes ».
+
+### Schéma de la collection `messages`
+
+| Attribut | Type et limite | Requis |
+| --- | --- | :---: |
+| `requestId` | Chaîne, 36 caractères | Oui |
+| `senderId` | Chaîne, 36 caractères | Oui |
+| `content` | Chaîne, 1 000 caractères | Oui |
+
+Chaque message est lié à une demande de la conversation ; l’index `by_request` permet de charger le fil dans l’ordre chronologique. L’accès en lecture de chaque message est limité à l’acheteur et au vendeur concernés.
 
 Pour les livres, la langue se choisit parmi Français, Anglais, Espagnol, Allemand, Italien, Bilingue et Autre. Le choix « Autre » requiert une précision dans la description.
 
@@ -163,8 +174,11 @@ Les identifiants Appwrite de la base, de la collection, du bucket et de la fonct
 | `VITE_APPWRITE_ENDPOINT` | Endpoint Appwrite ; Frankfurt par défaut (`https://fra.cloud.appwrite.io/v1`) |
 | `VITE_APPWRITE_PROJECT_ID` | Identifiant du projet |
 | `VITE_APPWRITE_SIGNUP_FUNCTION_ID` | Identifiant de la fonction `create-family-account` |
+| `VITE_APPWRITE_MARKET_FUNCTION_ID` | Identifiant de la fonction `market-conversations` |
 | `VITE_APPWRITE_DATABASE_ID` | Même identifiant de base que `APPWRITE_DATABASE_ID` |
 | `VITE_APPWRITE_LISTINGS_COLLECTION_ID` | Identifiant de la collection `listings` |
+| `VITE_APPWRITE_REQUESTS_COLLECTION_ID` | Identifiant de la collection des demandes `requests` |
+| `VITE_APPWRITE_MESSAGES_COLLECTION_ID` | Identifiant de la collection des messages `messages` |
 | `VITE_APPWRITE_LISTING_PHOTOS_BUCKET_ID` | Identifiant du bucket `listing-photos` |
 
 <a id="developpement-tests"></a>
@@ -179,8 +193,8 @@ npm run dev
 
 | Commande | Vérification |
 | --- | --- |
-| `npm test` | Tests d’inscription, de la liste d’adresses autorisées et du schéma de provisionnement |
-| `npm run test:e2e` | Parcours navigateur complet des annonces, avec Appwrite simulé |
+| `npm test` | Tests des fonctions, de la liste d’adresses autorisées et du schéma de provisionnement |
+| `npm run test:e2e` | Parcours navigateur des annonces et des conversations acheteur-vendeur, avec Appwrite simulé |
 | `npm run test:e2e:config` | Affichage de la configuration manquante et masquage du bouton de nouvel essai inutile |
 | `npm run build` | Compilation de production |
 
