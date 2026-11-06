@@ -170,6 +170,12 @@ async function installMarketplaceApi(page, initialListings = [], initialRequests
                 && otherRequest.listingId === purchaseRequest.listingId
                 && otherRequest.status === "pending") {
                 otherRequest.status = "rejected";
+                const otherOffer = [...conversationMessages].reverse().find((item) =>
+                  item.requestId === otherRequest.$id
+                  && item.kind === otherRequest.type
+                  && item.status === "pending"
+                );
+                if (otherOffer) otherOffer.status = "rejected";
                 updatedRequests.push(otherRequest);
               }
             }
@@ -271,10 +277,15 @@ async function installMarketplaceApi(page, initialListings = [], initialRequests
     }
 
     if (path.includes("/databases/") && path.endsWith("/documents") && request.method() === "GET") {
+      const requestId = [...url.searchParams.entries()]
+        .filter(([key]) => key.startsWith("queries["))
+        .map(([, query]) => JSON.parse(query))
+        .find((query) => query.method === "equal" && query.attribute === "requestId")
+        ?.values[0];
       const documents = collectionId === "e2e-requests"
         ? requests.filter((item) => item.buyerId === currentUserId || item.sellerId === currentUserId)
         : collectionId === "e2e-messages"
-          ? conversationMessages
+          ? conversationMessages.filter((item) => item.requestId === requestId)
           : listings;
       await route.fulfill({ json: { total: documents.length, documents } });
       return;
@@ -686,6 +697,52 @@ test("the seller can refuse and later accept a new offer in the same conversatio
   api.setCurrentUserId("family-1");
   await page.reload();
   await expect(page.getByRole("link", { name: "Consulter l’annonce : Pull en laine" })).toHaveCount(0);
+});
+
+test("accepting one of two competing offers reserves the listing and refuses the other", async ({ page }) => {
+  const api = await installMarketplaceApi(page, [existingListing()]);
+
+  await page.goto("/");
+  await page.getByRole("link", { name: "Consulter l’annonce : Pull en laine" }).click();
+  await page.getByRole("spinbutton", { name: "Votre offre" }).fill("3");
+  await page.getByRole("button", { name: "Envoyer une offre" }).click();
+
+  api.setCurrentUserId("family-2");
+  await page.reload();
+  await page.getByRole("link", { name: "Consulter l’annonce : Pull en laine" }).click();
+  await page.getByRole("spinbutton", { name: "Votre offre" }).fill("2");
+  await page.getByRole("button", { name: "Envoyer une offre" }).click();
+  expect(api.requests).toHaveLength(2);
+  expect(api.requests.every((request) => request.status === "pending")).toBe(true);
+
+  api.setCurrentUserId("seller-2");
+  await page.reload();
+  await page.getByRole("button", { name: "Mes ventes" }).click();
+  await expect(page.locator(".purchase-card")).toHaveCount(2);
+  await page.locator(".purchase-card").filter({ hasText: "Offre : 3 €" }).click();
+  await page.getByRole("button", { name: "Accepter l’offre" }).click();
+
+  await expect(page.locator(".conversation-offer .offer-state")).toHaveText("Acceptée");
+  expect(api.listings[0].status).toBe("reserved");
+  expect(api.requests.find((request) => request.buyerId === "family-1").status).toBe("accepted");
+  expect(api.requests.find((request) => request.buyerId === "family-2").status).toBe("rejected");
+
+  await page.getByRole("button", { name: "← Mes ventes" }).click();
+  await page.locator(".purchase-card").filter({ hasText: "Offre : 2 €" }).click();
+  await expect(page.locator(".conversation-offer .offer-state")).toHaveText("Refusée");
+
+  api.setCurrentUserId("family-2");
+  await page.reload();
+  await page.getByRole("button", { name: "Mes achats" }).click();
+  await page.locator(".purchase-card").click();
+  await expect(page.locator(".conversation-offer .offer-state")).toHaveText("Refusée");
+  await expect(page.getByRole("link", { name: "Consulter l’annonce : Pull en laine" })).toHaveCount(0);
+
+  api.setCurrentUserId("family-1");
+  await page.reload();
+  await page.getByRole("button", { name: "Mes achats" }).click();
+  await page.locator(".purchase-card").click();
+  await expect(page.locator(".conversation-offer .offer-state")).toHaveText("Acceptée");
 });
 
 test("offer message aligns with its author in both views", async ({ page }) => {
