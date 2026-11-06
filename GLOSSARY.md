@@ -29,7 +29,7 @@ Description normalisée de l’état d’un objet, choisie parmi Neuf, Très bon
 Demande par laquelle une famille indique vouloir acheter l’objet au prix affiché. Le vendeur doit l’accepter pour réserver l’annonce.
 
 **Offre de prix** :
-Proposition d’un acheteur inférieure au prix affiché. Le vendeur peut l’accepter, la refuser ou proposer un contre-montant.
+Proposition d’un acheteur inférieure au prix affiché. Le vendeur peut l’accepter ou la refuser. Après un refus, l’acheteur peut proposer un nouveau montant dans la même conversation; le vendeur ne fait pas de contre-offre.
 
 **Demande de don** :
 Demande d’une famille pour recevoir un objet gratuit. Le vendeur peut l’accepter ou la refuser.

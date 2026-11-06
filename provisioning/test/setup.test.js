@@ -156,6 +156,7 @@ test("creates the database, listing collection schema, and private photo bucket"
   assert.deepEqual(requests.indexes, [
     { key: "by_buyer", type: "key", attributes: ["buyerId"] },
     { key: "by_seller", type: "key", attributes: ["sellerId"] },
+    { key: "by_buyer_listing", type: "unique", attributes: ["buyerId", "listingId"] },
   ]);
 
   const messagesCollection = calls.find(([name, params]) => name === "createCollection" && params.collectionId === "messages")[1];
@@ -224,6 +225,7 @@ test("leaves existing resources untouched when their schema matches", async () =
         indexes: [
           { key: "by_buyer", type: "key", attributes: ["buyerId"], status: "available" },
           { key: "by_seller", type: "key", attributes: ["sellerId"], status: "available" },
+          { key: "by_buyer_listing", type: "unique", attributes: ["buyerId", "listingId"], status: "available" },
         ],
       },
       messages: {
@@ -269,7 +271,7 @@ test("adds the optional seller metadata fields to an existing collection", async
         documentSecurity: true,
         $permissions: ['read("users")', 'create("users")'],
         attributes: LISTING_ATTRIBUTES
-          .filter((attribute) => !["sellerId", "sellerInitials"].includes(attribute.key))
+          .filter((attribute) => !["sellerId", "sellerInitials", "status"].includes(attribute.key))
           .map((attribute) => ({ ...attribute, status: "available" })),
       },
       bucket: {
@@ -310,11 +312,18 @@ test("adds the optional seller metadata fields to an existing collection", async
         size: 20,
         required: false,
       }],
+      ["createStringAttribute", {
+        databaseId: "market-db",
+        collectionId: "listings",
+        key: "status",
+        size: 20,
+        required: false,
+      }],
     ],
   );
 });
 
-test("adds the buyer index to an existing purchase-request collection", async () => {
+test("adds request indexes, including the unique buyer/listing conversation index", async () => {
   const { calls, databases, storage } = createServices({
     existing: {
       database: { $id: "market-db" },
@@ -369,6 +378,13 @@ test("adds the buyer index to an existing purchase-request collection", async ()
         type: "key",
         attributes: ["sellerId"],
       }],
+      ["createIndex", {
+        databaseId: "market-db",
+        collectionId: "requests",
+        key: "by_buyer_listing",
+        type: "unique",
+        attributes: ["buyerId", "listingId"],
+      }],
     ],
   );
   assert.deepEqual(
@@ -380,6 +396,87 @@ test("adds the buyer index to an existing purchase-request collection", async ()
       permissions: [],
       documentSecurity: true,
     }],
+  );
+});
+
+test("adds structured offer fields to an existing conversation-message collection", async () => {
+  const { calls, databases, storage } = createServices({
+    existing: {
+      database: { $id: "market-db" },
+      collection: {
+        $id: "listings",
+        documentSecurity: true,
+        $permissions: ['read("users")', 'create("users")'],
+        attributes: LISTING_ATTRIBUTES.map((attribute) => ({ ...attribute, status: "available" })),
+      },
+      requests: {
+        $id: "requests",
+        documentSecurity: true,
+        $permissions: [],
+        attributes: PURCHASE_REQUEST_ATTRIBUTES.map((attribute) => ({ ...attribute, status: "available" })),
+        indexes: [
+          { key: "by_buyer", type: "key", attributes: ["buyerId"], status: "available" },
+          { key: "by_seller", type: "key", attributes: ["sellerId"], status: "available" },
+          { key: "by_buyer_listing", type: "unique", attributes: ["buyerId", "listingId"], status: "available" },
+        ],
+      },
+      messages: {
+        $id: "messages",
+        documentSecurity: true,
+        $permissions: [],
+        attributes: CONVERSATION_MESSAGE_ATTRIBUTES
+          .filter(({ key }) => !["kind", "amount", "status"].includes(key))
+          .map((attribute) => ({ ...attribute, status: "available" })),
+        indexes: [{ key: "by_request", type: "key", attributes: ["requestId"], status: "available" }],
+      },
+      bucket: {
+        $id: "listing-photos",
+        fileSecurity: true,
+        $permissions: ['read("users")', 'create("users")'],
+      },
+    },
+  });
+
+  await provisionMarketplace({
+    databases,
+    storage,
+    config: {
+      databaseId: "market-db",
+      collectionId: "listings",
+      requestsCollectionId: "requests",
+      messagesCollectionId: "messages",
+      bucketId: "listing-photos",
+    },
+    log() {},
+  });
+
+  assert.deepEqual(
+    calls.filter(([name, params]) => name === "createStringAttribute" && params.collectionId === "messages"),
+    [
+      ["createStringAttribute", {
+        databaseId: "market-db",
+        collectionId: "messages",
+        key: "kind",
+        size: 20,
+        required: false,
+      }],
+      ["createStringAttribute", {
+        databaseId: "market-db",
+        collectionId: "messages",
+        key: "status",
+        size: 20,
+        required: false,
+      }],
+    ],
+  );
+  assert.deepEqual(
+    calls.filter(([name, params]) => name === "createIntegerAttribute" && params.collectionId === "messages"),
+    [["createIntegerAttribute", {
+      databaseId: "market-db",
+      collectionId: "messages",
+      key: "amount",
+      required: false,
+    }]],
   );
 });
 
