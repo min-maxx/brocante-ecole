@@ -25,6 +25,9 @@ Description normalisée de l’état d’un objet, choisie parmi Neuf, Très bon
 **Conversation privée** :
 Échange entre deux familles pour poser des questions ou organiser la remise d’un objet. Elle ne constitue pas une demande d’achat et ne change pas la disponibilité de l’annonce.
 
+**Conversation masquée** :
+Conversation qu’un participant a masquée dans sa propre liste, sans effet pour l’autre famille. Elle redevient visible dès qu’un nouveau message ou une nouvelle offre est ajouté au fil.
+
 **Demande d’achat** :
 Demande par laquelle une famille indique vouloir acheter l’objet au prix affiché. Le vendeur doit l’accepter pour réserver l’annonce.
 

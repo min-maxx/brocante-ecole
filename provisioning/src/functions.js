@@ -258,6 +258,7 @@ export async function provisionFunctions({
         APPWRITE_LISTINGS_COLLECTION_ID: config.collectionId,
         APPWRITE_REQUESTS_COLLECTION_ID: config.requestsCollectionId,
         APPWRITE_MESSAGES_COLLECTION_ID: config.messagesCollectionId,
+        APPWRITE_VISIBILITY_COLLECTION_ID: config.visibilityCollectionId,
       },
     },
   ];

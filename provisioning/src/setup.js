@@ -45,6 +45,12 @@ export const CONVERSATION_MESSAGE_ATTRIBUTES = [
   { key: "status", type: "string", size: 20, required: false },
 ];
 
+export const CONVERSATION_VISIBILITY_ATTRIBUTES = [
+  { key: "requestId", type: "string", size: 36, required: true },
+  { key: "userId", type: "string", size: 36, required: true },
+  { key: "hiddenActivityAt", type: "string", size: 30, required: true },
+];
+
 const COLLECTION_PERMISSIONS = ['read("users")', 'create("users")'];
 const PRIVATE_COLLECTION_PERMISSIONS = [];
 const BUCKET_PERMISSIONS = ['read("users")', 'create("users")'];
@@ -57,6 +63,7 @@ const PURCHASE_REQUEST_INDEXES = [
   { key: "by_buyer_listing", type: "unique", attributes: ["buyerId", "listingId"] },
 ];
 const CONVERSATION_MESSAGES_INDEX = { key: "by_request", type: "key", attributes: ["requestId"] };
+const CONVERSATION_VISIBILITY_INDEX = { key: "by_user_request", type: "key", attributes: ["userId", "requestId"] };
 
 function isNotFound(error) {
   return error?.code === 404;
@@ -292,6 +299,39 @@ async function verifyConversationMessageCollection(collection, { databases, data
   });
 }
 
+async function verifyVisibilityCollection(collection, { databases, databaseId, collectionId, log }) {
+  await verifyPrivateCollectionPermissions(collection, {
+    databases,
+    databaseId,
+    collectionId,
+    expectedPermissions: PRIVATE_COLLECTION_PERMISSIONS,
+    log,
+  });
+  const existingAttributes = new Map((collection.attributes ?? []).map((attribute) => [attribute.key, attribute]));
+  for (const expected of CONVERSATION_VISIBILITY_ATTRIBUTES) {
+    const actual = existingAttributes.get(expected.key);
+    const matches = actual
+      && actual.type === expected.type
+      && actual.size === expected.size
+      && actual.required === expected.required
+      && Boolean(actual.array) === Boolean(expected.array);
+    if (!matches) {
+      throw new Error(
+        `L’attribut « ${expected.key} » de la collection de visibilité « ${collection.$id} » manque ou ne correspond pas au schéma attendu. ` +
+        "Aucune modification automatique n’a été appliquée.",
+      );
+    }
+  }
+  await ensureIndexes(collection, {
+    databases,
+    databaseId,
+    collectionId,
+    expectedIndexes: [CONVERSATION_VISIBILITY_INDEX],
+    resourceName: "visibilité",
+    log,
+  });
+}
+
 function verifyBucket(bucket) {
   if (bucket.fileSecurity !== true) {
     throw new Error(
@@ -328,7 +368,14 @@ export async function provisionMarketplace({
   config,
   log = console.log,
 }) {
-  const { databaseId, collectionId, requestsCollectionId, messagesCollectionId, bucketId } = config;
+  const {
+    databaseId,
+    collectionId,
+    requestsCollectionId,
+    messagesCollectionId,
+    visibilityCollectionId,
+    bucketId,
+  } = config;
   const shouldProvisionFunctions = functions || project || inputFile;
   if (shouldProvisionFunctions && (!functions || !project || typeof inputFile !== "function")) {
     throw new Error("Le provisionnement complet exige les services Functions, Project et InputFile d’Appwrite.");
@@ -407,6 +454,28 @@ export async function provisionMarketplace({
   });
 
   await ensureResource({
+    get: () => databases.getCollection({ databaseId, collectionId: visibilityCollectionId }),
+    create: () => databases.createCollection({
+      databaseId,
+      collectionId: visibilityCollectionId,
+      name: "Visibilité des conversations",
+      permissions: PRIVATE_COLLECTION_PERMISSIONS,
+      documentSecurity: true,
+      enabled: true,
+      attributes: CONVERSATION_VISIBILITY_ATTRIBUTES,
+      indexes: [CONVERSATION_VISIBILITY_INDEX],
+    }),
+    verify: (collection) => verifyVisibilityCollection(collection, {
+      databases,
+      databaseId,
+      collectionId: visibilityCollectionId,
+      log,
+    }),
+    description: `collection ${visibilityCollectionId}`,
+    log,
+  });
+
+  await ensureResource({
     get: () => storage.getBucket({ bucketId }),
     create: () => storage.createBucket({
       bucketId,
@@ -434,6 +503,7 @@ function readConfig(environment) {
     "APPWRITE_LISTINGS_COLLECTION_ID",
     "APPWRITE_REQUESTS_COLLECTION_ID",
     "APPWRITE_MESSAGES_COLLECTION_ID",
+    "APPWRITE_VISIBILITY_COLLECTION_ID",
     "APPWRITE_LISTING_PHOTOS_BUCKET_ID",
   ];
   const missing = required.filter((name) => !environment[name]?.trim());
@@ -448,6 +518,7 @@ function readConfig(environment) {
     collectionId: environment.APPWRITE_LISTINGS_COLLECTION_ID,
     requestsCollectionId: environment.APPWRITE_REQUESTS_COLLECTION_ID,
     messagesCollectionId: environment.APPWRITE_MESSAGES_COLLECTION_ID,
+    visibilityCollectionId: environment.APPWRITE_VISIBILITY_COLLECTION_ID,
     bucketId: environment.APPWRITE_LISTING_PHOTOS_BUCKET_ID,
     signupFunctionId: environment.APPWRITE_SIGNUP_FUNCTION_ID?.trim() || "6ac8938f000181b4c7df",
     marketFunctionId: environment.APPWRITE_MARKET_FUNCTION_ID?.trim() || "market-conversations",

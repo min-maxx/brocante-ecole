@@ -4,6 +4,7 @@ import test from "node:test";
 import { promisify } from "node:util";
 import {
   CONVERSATION_MESSAGE_ATTRIBUTES,
+  CONVERSATION_VISIBILITY_ATTRIBUTES,
   LISTING_ATTRIBUTES,
   PURCHASE_REQUEST_ATTRIBUTES,
   provisionMarketplace,
@@ -29,6 +30,7 @@ function createServices({ existing = {} } = {}) {
         listings: existing.collection,
         requests: existing.requests,
         messages: existing.messages,
+        "conversation-visibility": existing.visibility,
       };
       if (!collections[collectionId]) throw notFound();
       return collections[collectionId];
@@ -139,6 +141,7 @@ test("creates the database, listing collection schema, and private photo bucket"
       collectionId: "listings",
       requestsCollectionId: "requests",
       messagesCollectionId: "messages",
+      visibilityCollectionId: "conversation-visibility",
       bucketId: "listing-photos",
     },
     log: (message) => messages.push(message),
@@ -165,15 +168,22 @@ test("creates the database, listing collection schema, and private photo bucket"
   assert.deepEqual(messagesCollection.permissions, []);
   assert.deepEqual(messagesCollection.indexes, [{ key: "by_request", type: "key", attributes: ["requestId"] }]);
 
+  const visibilityCollection = calls.find(([name, params]) => name === "createCollection" && params.collectionId === "conversation-visibility")[1];
+  assert.equal(visibilityCollection.documentSecurity, true);
+  assert.deepEqual(visibilityCollection.attributes, CONVERSATION_VISIBILITY_ATTRIBUTES);
+  assert.deepEqual(visibilityCollection.permissions, []);
+  assert.deepEqual(visibilityCollection.indexes, [{ key: "by_user_request", type: "key", attributes: ["userId", "requestId"] }]);
+
   const bucket = calls.find(([name]) => name === "createBucket")[1];
   assert.equal(bucket.fileSecurity, true);
   assert.deepEqual(bucket.permissions, ['read("users")', 'create("users")']);
-  assert.equal(calls.filter(([name]) => ["createDatabase", "createCollection", "createBucket"].includes(name)).length, 5);
+  assert.equal(calls.filter(([name]) => ["createDatabase", "createCollection", "createBucket"].includes(name)).length, 6);
   assert.deepEqual(messages, [
     "Créé : base market-db",
     "Créé : collection listings",
     "Créé : collection requests",
     "Créé : collection messages",
+    "Créé : collection conversation-visibility",
     "Créé : bucket listing-photos",
   ]);
 });
@@ -191,6 +201,7 @@ test("validates complete Function services before creating marketplace resources
         collectionId: "listings",
         requestsCollectionId: "requests",
         messagesCollectionId: "messages",
+        visibilityCollectionId: "conversation-visibility",
         bucketId: "listing-photos",
       },
       log() {},
@@ -238,6 +249,16 @@ test("leaves existing resources untouched when their schema matches", async () =
         })),
         indexes: [{ key: "by_request", type: "key", attributes: ["requestId"], status: "available" }],
       },
+      visibility: {
+        $id: "conversation-visibility",
+        documentSecurity: true,
+        $permissions: [],
+        attributes: CONVERSATION_VISIBILITY_ATTRIBUTES.map((attribute) => ({
+          ...attribute,
+          status: "available",
+        })),
+        indexes: [{ key: "by_user_request", type: "key", attributes: ["userId", "requestId"], status: "available" }],
+      },
       bucket: {
         $id: "listing-photos",
         fileSecurity: true,
@@ -254,6 +275,7 @@ test("leaves existing resources untouched when their schema matches", async () =
       collectionId: "listings",
       requestsCollectionId: "requests",
       messagesCollectionId: "messages",
+      visibilityCollectionId: "conversation-visibility",
       bucketId: "listing-photos",
     },
     log() {},
@@ -290,6 +312,7 @@ test("adds the optional seller metadata fields to an existing collection", async
       collectionId: "listings",
       requestsCollectionId: "requests",
       messagesCollectionId: "messages",
+      visibilityCollectionId: "conversation-visibility",
       bucketId: "listing-photos",
     },
     log() {},
@@ -356,6 +379,7 @@ test("adds request indexes, including the unique buyer/listing conversation inde
       collectionId: "listings",
       requestsCollectionId: "requests",
       messagesCollectionId: "messages",
+      visibilityCollectionId: "conversation-visibility",
       bucketId: "listing-photos",
     },
     log() {},
@@ -445,6 +469,7 @@ test("adds structured offer fields to an existing conversation-message collectio
       collectionId: "listings",
       requestsCollectionId: "requests",
       messagesCollectionId: "messages",
+      visibilityCollectionId: "conversation-visibility",
       bucketId: "listing-photos",
     },
     log() {},
@@ -480,6 +505,72 @@ test("adds structured offer fields to an existing conversation-message collectio
   );
 });
 
+test("creates the private conversation-visibility collection with its user/request index", async () => {
+  const { calls, databases, storage } = createServices({
+    existing: {
+      database: { $id: "market-db" },
+      collection: {
+        $id: "listings",
+        documentSecurity: true,
+        $permissions: ['read("users")', 'create("users")'],
+        attributes: LISTING_ATTRIBUTES.map((attribute) => ({ ...attribute, status: "available" })),
+      },
+      requests: {
+        $id: "requests",
+        documentSecurity: true,
+        $permissions: [],
+        attributes: PURCHASE_REQUEST_ATTRIBUTES.map((attribute) => ({ ...attribute, status: "available" })),
+        indexes: [
+          { key: "by_buyer", type: "key", attributes: ["buyerId"], status: "available" },
+          { key: "by_seller", type: "key", attributes: ["sellerId"], status: "available" },
+          { key: "by_buyer_listing", type: "unique", attributes: ["buyerId", "listingId"], status: "available" },
+        ],
+      },
+      messages: {
+        $id: "messages",
+        documentSecurity: true,
+        $permissions: [],
+        attributes: CONVERSATION_MESSAGE_ATTRIBUTES.map((attribute) => ({ ...attribute, status: "available" })),
+        indexes: [{ key: "by_request", type: "key", attributes: ["requestId"], status: "available" }],
+      },
+      bucket: {
+        $id: "listing-photos",
+        fileSecurity: true,
+        $permissions: ['read("users")', 'create("users")'],
+      },
+    },
+  });
+
+  await provisionMarketplace({
+    databases,
+    storage,
+    config: {
+      databaseId: "market-db",
+      collectionId: "listings",
+      requestsCollectionId: "requests",
+      messagesCollectionId: "messages",
+      visibilityCollectionId: "conversation-visibility",
+      bucketId: "listing-photos",
+    },
+    log() {},
+  });
+
+  const createCall = calls.find(([name, params]) => name === "createCollection"
+    && params.collectionId === "conversation-visibility");
+  assert.ok(createCall, "la collection de visibilité doit être créée");
+  const [, params] = createCall;
+  assert.deepEqual(params.permissions, []);
+  assert.equal(params.documentSecurity, true);
+  assert.deepEqual(params.attributes.map((attribute) => attribute.key), [
+    "requestId",
+    "userId",
+    "hiddenActivityAt",
+  ]);
+  assert.deepEqual(params.indexes, [
+    { key: "by_user_request", type: "key", attributes: ["userId", "requestId"] },
+  ]);
+});
+
 test("stops rather than silently accepting a collection with missing attributes", async () => {
   const { calls, databases, storage } = createServices({
     existing: {
@@ -502,6 +593,7 @@ test("stops rather than silently accepting a collection with missing attributes"
         collectionId: "listings",
         requestsCollectionId: "requests",
         messagesCollectionId: "messages",
+        visibilityCollectionId: "conversation-visibility",
         bucketId: "listing-photos",
       },
       log() {},
@@ -526,6 +618,7 @@ test("provisions both Appwrite functions, their runtime settings, and active dep
       collectionId: "listings",
       requestsCollectionId: "requests",
       messagesCollectionId: "messages",
+      visibilityCollectionId: "conversation-visibility",
       bucketId: "listing-photos",
       signupFunctionId: "signup-family",
       marketFunctionId: "market-conversations",
@@ -575,6 +668,7 @@ test("provisions both Appwrite functions, their runtime settings, and active dep
     { functionId: "market-conversations", key: "APPWRITE_LISTINGS_COLLECTION_ID", value: "listings", secret: false },
     { functionId: "market-conversations", key: "APPWRITE_REQUESTS_COLLECTION_ID", value: "requests", secret: false },
     { functionId: "market-conversations", key: "APPWRITE_MESSAGES_COLLECTION_ID", value: "messages", secret: false },
+    { functionId: "market-conversations", key: "APPWRITE_VISIBILITY_COLLECTION_ID", value: "conversation-visibility", secret: false },
   ]);
 
   const deployments = calls
@@ -665,6 +759,7 @@ test("reuses the existing signup Function configuration and repairs its settings
       collectionId: "listings",
       requestsCollectionId: "requests",
       messagesCollectionId: "messages",
+      visibilityCollectionId: "conversation-visibility",
       bucketId: "listing-photos",
       signupFunctionId: "signup-family",
       marketFunctionId: "market-conversations",

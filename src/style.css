@@ -672,6 +672,41 @@ button:disabled {
   gap: 8px;
 }
 
+.purchase-list-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 6px;
+}
+
+.purchase-list-toolbar .text-button {
+  margin-left: 0;
+}
+
+.purchase-card-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+}
+
+.purchase-card-hidden {
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #e9eee4;
+  color: #64706b;
+  font-size: 0.7rem;
+  font-weight: 700;
+  vertical-align: middle;
+}
+
+.conversation-visibility {
+  margin-left: 0;
+  padding-top: 12px;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
 .purchase-card {
   display: grid;
   width: 100%;
@@ -815,8 +850,16 @@ button:disabled {
 }
 
 .conversation-thread-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
   padding: 18px 20px 14px;
   border-bottom: 1px solid #e9ece5;
+}
+
+.conversation-thread-header .conversation-visibility {
+  padding-top: 4px;
 }
 
 .conversation-thread-header h1 {
@@ -1633,6 +1676,10 @@ button:disabled {
     grid-template-columns: 40px minmax(0, 1fr) auto;
     gap: 9px;
     padding: 9px;
+  }
+
+  .purchase-card-row {
+    gap: 6px;
   }
 
   .purchase-card-avatar {

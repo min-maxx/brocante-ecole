@@ -70,6 +70,7 @@ Complétez `provisioning/.env` :
 | `APPWRITE_LISTINGS_COLLECTION_ID` | Identifiant de la collection ; le modèle propose `listings` |
 | `APPWRITE_REQUESTS_COLLECTION_ID` | Identifiant de la collection des demandes ; le modèle propose `requests` |
 | `APPWRITE_MESSAGES_COLLECTION_ID` | Identifiant de la collection des messages ; le modèle propose `messages` |
+| `APPWRITE_VISIBILITY_COLLECTION_ID` | Identifiant de la collection privée de visibilité des conversations masquées ; le modèle propose `conversation-visibility` |
 | `APPWRITE_LISTING_PHOTOS_BUCKET_ID` | Identifiant du bucket ; le modèle propose `listing-photos` |
 | `APPWRITE_SIGNUP_FUNCTION_ID` | ID de `create-family-account`, prérempli dans le modèle |
 | `APPWRITE_MARKET_FUNCTION_ID` | ID de `market-conversations`, prérempli dans le modèle |

@@ -8,6 +8,7 @@ const REQUIRED_ENVIRONMENT = [
   "APPWRITE_LISTINGS_COLLECTION_ID",
   "APPWRITE_REQUESTS_COLLECTION_ID",
   "APPWRITE_MESSAGES_COLLECTION_ID",
+  "APPWRITE_VISIBILITY_COLLECTION_ID",
 ];
 
 function familyInitials(user) {
@@ -42,6 +43,7 @@ function createServices(req) {
   const listingsCollectionId = process.env.APPWRITE_LISTINGS_COLLECTION_ID;
   const requestsCollectionId = process.env.APPWRITE_REQUESTS_COLLECTION_ID;
   const messagesCollectionId = process.env.APPWRITE_MESSAGES_COLLECTION_ID;
+  const visibilityCollectionId = process.env.APPWRITE_VISIBILITY_COLLECTION_ID;
 
   async function listDocuments(collectionId, filters) {
     const documents = [];
@@ -159,6 +161,36 @@ function createServices(req) {
       databaseId,
       collectionId: requestsCollectionId,
       documentId: requestId,
+    }),
+    getVisibilityByRequestAndUser: async (requestId, userId) => {
+      const result = await databases.listDocuments({
+        databaseId,
+        collectionId: visibilityCollectionId,
+        queries: [
+          Query.equal("requestId", requestId),
+          Query.equal("userId", userId),
+          Query.limit(1),
+        ],
+      });
+      return result.documents[0] || null;
+    },
+    createVisibility: ({ requestId, userId, hiddenActivityAt }) => databases.createDocument({
+      databaseId,
+      collectionId: visibilityCollectionId,
+      documentId: ID.unique(),
+      data: { requestId, userId, hiddenActivityAt },
+      permissions: [Permission.read(Role.user(userId))],
+    }),
+    updateVisibility: (visibilityId, data) => databases.updateDocument({
+      databaseId,
+      collectionId: visibilityCollectionId,
+      documentId: visibilityId,
+      data,
+    }),
+    deleteVisibility: (visibilityId) => databases.deleteDocument({
+      databaseId,
+      collectionId: visibilityCollectionId,
+      documentId: visibilityId,
     }),
   };
 }
