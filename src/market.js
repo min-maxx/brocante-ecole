@@ -727,7 +727,7 @@ export function createMarketplace({
       : `<time class="purchase-card-time" datetime="${new Date(updatedAtTimestamp).toISOString()}">${escapeHtml(relativeTimeLabel(updatedAt))}</time>`;
 
     const hidden = isConversationHidden(request);
-    return `<div class="purchase-card-row">
+    return `<div class="purchase-card-row${hidden ? " is-hidden" : ""}">
       <button class="purchase-card" type="button" data-action="open-conversation" data-request-id="${escapeHtml(request.$id)}" aria-label="Ouvrir la conversation avec ${escapeHtml(otherFamily)} pour ${escapeHtml(request.listingTitle)}">
         <span class="purchase-card-avatar" aria-hidden="true">${escapeHtml(contactInitial)}</span>
         <span class="purchase-card-content">
@@ -747,7 +747,7 @@ export function createMarketplace({
 
   function visibilityButtonMarkup(request) {
     const hidden = isConversationHidden(request);
-    return `<button class="text-button conversation-visibility" type="button" data-action="${hidden ? "show-conversation" : "hide-conversation"}" data-request-id="${escapeHtml(request.$id)}"${submittingVisibility ? " disabled" : ""}>${hidden ? "Afficher" : "Masquer"}</button>`;
+    return `<button class="conversation-visibility" type="button" data-action="${hidden ? "show-conversation" : "hide-conversation"}" data-request-id="${escapeHtml(request.$id)}"${submittingVisibility ? " disabled" : ""}>${hidden ? "Afficher" : "Masquer"}</button>`;
   }
 
   function conversationThreadMarkup(role) {

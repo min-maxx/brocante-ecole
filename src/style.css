@@ -685,8 +685,28 @@ button:disabled {
 .purchase-card-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
+  align-items: center;
   gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid #e0e5dc;
+  border-radius: 14px;
+  background: #fffefa;
+  box-shadow: 0 7px 22px rgb(38 50 43 / 5%);
+}
+
+.purchase-card-row:hover {
+  border-color: #b9c9bb;
+  box-shadow: 0 10px 28px rgb(38 50 43 / 10%);
+}
+
+.purchase-card-row.is-hidden {
+  border-style: dashed;
+  border-color: #c5ccc2;
+  background: #f1f2ec;
+}
+
+.purchase-card-row.is-hidden:hover {
+  border-color: #aab6ab;
 }
 
 .purchase-card-hidden {
@@ -701,32 +721,45 @@ button:disabled {
 }
 
 .conversation-visibility {
-  margin-left: 0;
-  padding-top: 12px;
-  font-size: 0.8rem;
+  min-height: auto;
+  margin: 0;
+  padding: 5px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: #eef0e6;
+  color: #27634b;
+  font-size: 0.75rem;
+  font-weight: 700;
   white-space: nowrap;
+  cursor: pointer;
 }
 
-.purchase-card {
+.conversation-visibility:hover:not(:disabled) {
+  color: #1d4a37;
+  background: #dfe4d6;
+}
+
+.purchase-card-row .conversation-visibility {
+  align-self: center;
+}
+
+.purchase-card-row > .purchase-card,
+.purchase-card-row > .purchase-card:hover:not(:disabled) {
   display: grid;
   width: 100%;
+  min-height: 0;
   grid-template-columns: 44px minmax(0, 1fr) auto;
   align-items: center;
   gap: 13px;
   overflow: hidden;
-  padding: 10px 12px;
-  border: 1px solid #e0e5dc;
-  border-radius: 14px;
-  background: #fffefa;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: inherit;
   font: inherit;
   text-align: left;
-  box-shadow: 0 7px 22px rgb(38 50 43 / 5%);
-}
-
-.purchase-card:hover {
-  border-color: #b9c9bb;
-  box-shadow: 0 10px 28px rgb(38 50 43 / 10%);
+  box-shadow: none;
 }
 
 .purchase-card-avatar {
@@ -858,9 +891,6 @@ button:disabled {
   border-bottom: 1px solid #e9ece5;
 }
 
-.conversation-thread-header .conversation-visibility {
-  padding-top: 4px;
-}
 
 .conversation-thread-header h1 {
   font-size: 1.4rem;
@@ -1672,14 +1702,14 @@ button:disabled {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .purchase-card {
-    grid-template-columns: 40px minmax(0, 1fr) auto;
-    gap: 9px;
+  .purchase-card-row {
+    gap: 6px;
     padding: 9px;
   }
 
-  .purchase-card-row {
-    gap: 6px;
+  .purchase-card-row > .purchase-card {
+    grid-template-columns: 40px minmax(0, 1fr) auto;
+    gap: 9px;
   }
 
   .purchase-card-avatar {
