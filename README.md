@@ -179,6 +179,7 @@ Les identifiants Appwrite de la base, de la collection, du bucket et de la fonct
 | `VITE_APPWRITE_LISTINGS_COLLECTION_ID` | Identifiant de la collection `listings` |
 | `VITE_APPWRITE_REQUESTS_COLLECTION_ID` | Identifiant de la collection des demandes `requests` |
 | `VITE_APPWRITE_MESSAGES_COLLECTION_ID` | Identifiant de la collection des messages `messages` |
+| `VITE_APPWRITE_VISIBILITY_COLLECTION_ID` | Identifiant de la collection des masquages de conversation `conversation-visibility` |
 | `VITE_APPWRITE_LISTING_PHOTOS_BUCKET_ID` | Identifiant du bucket `listing-photos` |
 
 <a id="developpement-tests"></a>

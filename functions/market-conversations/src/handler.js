@@ -415,6 +415,53 @@ export function createMarketplaceConversationHandler(services) {
       }
     }
 
+    if (body.action === "set-conversation-visibility") {
+      const { requestId, hidden } = body;
+      if (
+        typeof requestId !== "string"
+        || !APPWRITE_ID_PATTERN.test(requestId)
+        || typeof hidden !== "boolean"
+      ) {
+        return invalidInput(res);
+      }
+
+      try {
+        const request = await services.getRequest(requestId);
+        if (![request.buyerId, request.sellerId].includes(userId)) {
+          return res.json({
+            code: "not_participant",
+            message: "Vous ne participez pas à cette conversation.",
+          }, 403);
+        }
+
+        const visibility = await services.getVisibilityByRequestAndUser(requestId, userId);
+        if (!hidden) {
+          if (visibility) await services.deleteVisibility(visibility.$id);
+          return res.json({ requestId, hidden, hiddenActivityAt: null });
+        }
+
+        const hiddenActivityAt = request.$updatedAt;
+        if (visibility) {
+          await services.updateVisibility(visibility.$id, { hiddenActivityAt });
+        } else {
+          await services.createVisibility({ requestId, userId, hiddenActivityAt });
+        }
+        return res.json({ requestId, hidden, hiddenActivityAt });
+      } catch (cause) {
+        if (isNotFound(cause)) {
+          return res.json({
+            code: "conversation_not_found",
+            message: "Cette conversation n’est plus disponible.",
+          }, 404);
+        }
+        error(`La visibilité de la conversation n’a pas pu être modifiée (${cause instanceof Error ? cause.name : "UnknownError"}).`);
+        return res.json({
+          code: "internal_error",
+          message: "La visibilité de la conversation n’a pas pu être modifiée. Réessayez.",
+        }, 500);
+      }
+    }
+
     if (body.action !== "send-message") return invalidInput(res);
     const requestId = body.requestId;
     const content = typeof body.content === "string" ? body.content.trim() : "";

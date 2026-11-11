@@ -53,6 +53,7 @@ async function installMarketplaceApi(page, initialListings = [], initialRequests
   const published = [];
   const createdRequests = [];
   const createdMessages = [];
+  const visibility = [];
   let uploadedPhotos = 0;
   let currentUserId = "family-1";
   let nextEvent = 1;
@@ -238,6 +239,25 @@ async function installMarketplaceApi(page, initialListings = [], initialRequests
           purchaseRequest.$updatedAt = conversationMessage.$createdAt;
           return { message: conversationMessage, request: purchaseRequest };
         }
+        if (input.action === "set-conversation-visibility") {
+          const purchaseRequest = requests.find((item) => item.$id === input.requestId);
+          if (!purchaseRequest || ![purchaseRequest.buyerId, purchaseRequest.sellerId].includes(currentUserId)) {
+            return { error: { code: "not_participant", message: "Vous ne participez pas à cette conversation." }, status: 403 };
+          }
+          const hiddenActivityAt = input.hidden ? purchaseRequest.$updatedAt : null;
+          const row = visibility.find((item) => item.requestId === purchaseRequest.$id && item.userId === currentUserId);
+          if (row) {
+            row.hiddenActivityAt = hiddenActivityAt;
+          } else {
+            visibility.push({
+              $id: `visibility-${visibility.length + 1}`,
+              requestId: purchaseRequest.$id,
+              userId: currentUserId,
+              hiddenActivityAt,
+            });
+          }
+          return { requestId: purchaseRequest.$id, hidden: input.hidden, hiddenActivityAt };
+        }
         return { error: { code: "invalid_input", message: "Action invalide." }, status: 400 };
       };
       const result = execute();
@@ -286,7 +306,9 @@ async function installMarketplaceApi(page, initialListings = [], initialRequests
         ? requests.filter((item) => item.buyerId === currentUserId || item.sellerId === currentUserId)
         : collectionId === "e2e-messages"
           ? conversationMessages.filter((item) => item.requestId === requestId)
-          : listings;
+          : collectionId === "e2e-visibility"
+            ? visibility.filter((item) => item.userId === currentUserId)
+            : listings;
       await route.fulfill({ json: { total: documents.length, documents } });
       return;
     }
@@ -350,6 +372,7 @@ async function installMarketplaceApi(page, initialListings = [], initialRequests
     requests,
     createdRequests,
     createdMessages,
+    visibility,
     setCurrentUserId(userId) {
       currentUserId = userId;
     },
@@ -532,6 +555,39 @@ test("a family can send a prefilled offer and find its conversation in purchases
   await page.getByRole("button", { name: "Mes achats" }).click();
   await page.locator(".purchase-card").click();
   await expect(page.locator(".conversation-offer .offer-state")).toHaveText("En attente");
+});
+
+test("hides a conversation per account and shows it again after new activity", async ({ page }) => {
+  const api = await installMarketplaceApi(page, [existingListing()], [existingPurchaseRequest()]);
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "Mes achats" }).click();
+  await expect(page.locator(".purchase-card")).toHaveCount(1);
+
+  await page.getByRole("button", { name: "Masquer", exact: true }).click();
+  await expect(page.getByText("La conversation est masquée.")).toBeVisible();
+  await expect(page.locator(".purchase-card")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Toutes vos conversations sont masquées." })).toBeVisible();
+  expect(api.visibility).toEqual([
+    expect.objectContaining({ requestId: "request-existing", userId: "family-1", hiddenActivityAt: "2026-10-10T10:00:00.000Z" }),
+  ]);
+
+  await page.getByRole("button", { name: "Voir les conversations masquées" }).click();
+  await expect(page.locator(".purchase-card")).toHaveCount(1);
+  await expect(page.locator(".purchase-card .purchase-card-hidden")).toHaveText("Masquée");
+  await page.getByRole("button", { name: "Afficher", exact: true }).click();
+  await expect(page.getByText("La conversation est de nouveau affichée.")).toBeVisible();
+  await expect(page.locator(".purchase-card .purchase-card-hidden")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Masquer", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Voir les conversations masquées" }).click();
+
+  await page.getByRole("button", { name: "Masquer", exact: true }).click();
+  await expect(page.locator(".purchase-card")).toHaveCount(0);
+  api.requests[0].$updatedAt = "2026-10-10T11:00:00.000Z";
+  await page.reload();
+  await page.getByRole("button", { name: "Mes achats" }).click();
+  await expect(page.locator(".purchase-card")).toHaveCount(1);
+  await expect(page.locator(".purchase-card .purchase-card-hidden")).toHaveCount(0);
 });
 
 test("opens the existing conversation from an announcement instead of offering again", async ({ page }) => {

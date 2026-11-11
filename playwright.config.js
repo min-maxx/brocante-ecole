@@ -22,6 +22,7 @@ export default defineConfig({
       VITE_APPWRITE_LISTINGS_COLLECTION_ID: "e2e-listings",
       VITE_APPWRITE_REQUESTS_COLLECTION_ID: "e2e-requests",
       VITE_APPWRITE_MESSAGES_COLLECTION_ID: "e2e-messages",
+      VITE_APPWRITE_VISIBILITY_COLLECTION_ID: "e2e-visibility",
       VITE_APPWRITE_LISTING_PHOTOS_BUCKET_ID: "e2e-listing-photos",
     },
   },

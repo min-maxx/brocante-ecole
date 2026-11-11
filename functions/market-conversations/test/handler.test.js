@@ -430,3 +430,373 @@ test("a buyer cannot renew an offer for a reserved listing", async () => {
   assert.equal(response.body.code, "listing_not_available");
   assert.equal(offerChanged, false);
 });
+
+test("a participant hides a conversation with the server-side request update time", async () => {
+  let created;
+  const handler = createMarketplaceConversationHandler({
+    getRequest: async () => ({
+      $id: "request-1",
+      buyerId: "buyer-1",
+      sellerId: "seller-1",
+      $updatedAt: "2026-05-01T10:00:00.000+00:00",
+    }),
+    getVisibilityByRequestAndUser: async () => null,
+    createVisibility: async (input) => {
+      created = input;
+      return { $id: "visibility-1", ...input };
+    },
+  });
+  const { context, response } = createContext({
+    userId: "seller-1",
+    body: { action: "set-conversation-visibility", requestId: "request-1", hidden: true },
+  });
+
+  await handler(context);
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.body, {
+    requestId: "request-1",
+    hidden: true,
+    hiddenActivityAt: "2026-05-01T10:00:00.000+00:00",
+  });
+  assert.deepEqual(created, {
+    requestId: "request-1",
+    userId: "seller-1",
+    hiddenActivityAt: "2026-05-01T10:00:00.000+00:00",
+  });
+});
+
+test("hiding an already hidden conversation updates its existing visibility row", async () => {
+  let updated;
+  let createdRow = false;
+  const handler = createMarketplaceConversationHandler({
+    getRequest: async () => ({
+      $id: "request-1",
+      buyerId: "buyer-1",
+      sellerId: "seller-1",
+      $updatedAt: "2026-05-02T08:30:00.000+00:00",
+    }),
+    getVisibilityByRequestAndUser: async () => ({ $id: "visibility-1", hiddenActivityAt: "2026-05-01T10:00:00.000+00:00" }),
+    updateVisibility: async (visibilityId, data) => {
+      updated = { visibilityId, data };
+      return { $id: visibilityId, ...data };
+    },
+    createVisibility: async () => { createdRow = true; },
+  });
+  const { context, response } = createContext({
+    userId: "buyer-1",
+    body: { action: "set-conversation-visibility", requestId: "request-1", hidden: true },
+  });
+
+  await handler(context);
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.hiddenActivityAt, "2026-05-02T08:30:00.000+00:00");
+  assert.deepEqual(updated, {
+    visibilityId: "visibility-1",
+    data: { hiddenActivityAt: "2026-05-02T08:30:00.000+00:00" },
+  });
+  assert.equal(createdRow, false);
+});
+
+test("a participant unhides a conversation by deleting its visibility row", async () => {
+  let deletedId;
+  let writtenRow = false;
+  const handler = createMarketplaceConversationHandler({
+    getRequest: async () => ({ $id: "request-1", buyerId: "buyer-1", sellerId: "seller-1" }),
+    getVisibilityByRequestAndUser: async () => ({ $id: "visibility-1" }),
+    deleteVisibility: async (visibilityId) => { deletedId = visibilityId; },
+    createVisibility: async () => { writtenRow = true; },
+    updateVisibility: async () => { writtenRow = true; },
+  });
+  const { context, response } = createContext({
+    userId: "buyer-1",
+    body: { action: "set-conversation-visibility", requestId: "request-1", hidden: false },
+  });
+
+  await handler(context);
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.body, { requestId: "request-1", hidden: false, hiddenActivityAt: null });
+  assert.equal(deletedId, "visibility-1");
+  assert.equal(writtenRow, false);
+});
+
+test("unhiding a conversation that is not hidden succeeds without deleting anything", async () => {
+  let deleted = false;
+  const handler = createMarketplaceConversationHandler({
+    getRequest: async () => ({ $id: "request-1", buyerId: "buyer-1", sellerId: "seller-1" }),
+    getVisibilityByRequestAndUser: async () => null,
+    deleteVisibility: async () => { deleted = true; },
+  });
+  const { context, response } = createContext({
+    userId: "seller-1",
+    body: { action: "set-conversation-visibility", requestId: "request-1", hidden: false },
+  });
+
+  await handler(context);
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.body, { requestId: "request-1", hidden: false, hiddenActivityAt: null });
+  assert.equal(deleted, false);
+});
+
+test("a family outside a conversation cannot hide it", async () => {
+  let written = false;
+  const handler = createMarketplaceConversationHandler({
+    getRequest: async () => ({ $id: "request-1", buyerId: "buyer-1", sellerId: "seller-1", $updatedAt: "2026-05-01T10:00:00.000+00:00" }),
+    getVisibilityByRequestAndUser: async () => null,
+    createVisibility: async () => { written = true; },
+  });
+  const { context, response } = createContext({
+    userId: "other-family",
+    body: { action: "set-conversation-visibility", requestId: "request-1", hidden: true },
+  });
+
+  await handler(context);
+
+  assert.equal(response.statusCode, 403);
+  assert.equal(response.body.code, "not_participant");
+  assert.equal(written, false);
+});
+
+test("hiding a missing conversation returns conversation_not_found", async () => {
+  let written = false;
+  const handler = createMarketplaceConversationHandler({
+    getRequest: async () => {
+      const cause = new Error("Document not found");
+      cause.code = 404;
+      throw cause;
+    },
+    createVisibility: async () => { written = true; },
+  });
+  const { context, response } = createContext({
+    userId: "buyer-1",
+    body: { action: "set-conversation-visibility", requestId: "request-1", hidden: true },
+  });
+
+  await handler(context);
+
+  assert.equal(response.statusCode, 404);
+  assert.equal(response.body.code, "conversation_not_found");
+  assert.equal(written, false);
+});
+
+test("the visibility action rejects a non-boolean hidden flag", async () => {
+  let looked = false;
+  const handler = createMarketplaceConversationHandler({
+    getRequest: async () => { looked = true; return {}; },
+  });
+  const { context, response } = createContext({
+    userId: "buyer-1",
+    body: { action: "set-conversation-visibility", requestId: "request-1", hidden: "true" },
+  });
+
+  await handler(context);
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.body.code, "invalid_input");
+  assert.equal(looked, false);
+});
+
+test("the visibility action rejects an invalid request id", async () => {
+  let looked = false;
+  const handler = createMarketplaceConversationHandler({
+    getRequest: async () => { looked = true; return {}; },
+  });
+  const { context, response } = createContext({
+    userId: "buyer-1",
+    body: { action: "set-conversation-visibility", requestId: "../request", hidden: true },
+  });
+
+  await handler(context);
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.body.code, "invalid_input");
+  assert.equal(looked, false);
+});
+
+test("a participant hides a conversation with the server-side request update time", async () => {
+  let created;
+  const handler = createMarketplaceConversationHandler({
+    getRequest: async () => ({
+      $id: "request-1",
+      buyerId: "buyer-1",
+      sellerId: "seller-1",
+      $updatedAt: "2026-05-01T10:00:00.000+00:00",
+    }),
+    getVisibilityByRequestAndUser: async () => null,
+    createVisibility: async (input) => {
+      created = input;
+      return { $id: "visibility-1", ...input };
+    },
+  });
+  const { context, response } = createContext({
+    userId: "seller-1",
+    body: { action: "set-conversation-visibility", requestId: "request-1", hidden: true },
+  });
+
+  await handler(context);
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.body, {
+    requestId: "request-1",
+    hidden: true,
+    hiddenActivityAt: "2026-05-01T10:00:00.000+00:00",
+  });
+  assert.deepEqual(created, {
+    requestId: "request-1",
+    userId: "seller-1",
+    hiddenActivityAt: "2026-05-01T10:00:00.000+00:00",
+  });
+});
+
+test("hiding an already hidden conversation updates its existing visibility row", async () => {
+  let updated;
+  let createdRow = false;
+  const handler = createMarketplaceConversationHandler({
+    getRequest: async () => ({
+      $id: "request-1",
+      buyerId: "buyer-1",
+      sellerId: "seller-1",
+      $updatedAt: "2026-05-02T08:30:00.000+00:00",
+    }),
+    getVisibilityByRequestAndUser: async () => ({ $id: "visibility-1", hiddenActivityAt: "2026-05-01T10:00:00.000+00:00" }),
+    updateVisibility: async (visibilityId, data) => {
+      updated = { visibilityId, data };
+      return { $id: visibilityId, ...data };
+    },
+    createVisibility: async () => { createdRow = true; },
+  });
+  const { context, response } = createContext({
+    userId: "buyer-1",
+    body: { action: "set-conversation-visibility", requestId: "request-1", hidden: true },
+  });
+
+  await handler(context);
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.hiddenActivityAt, "2026-05-02T08:30:00.000+00:00");
+  assert.deepEqual(updated, {
+    visibilityId: "visibility-1",
+    data: { hiddenActivityAt: "2026-05-02T08:30:00.000+00:00" },
+  });
+  assert.equal(createdRow, false);
+});
+
+test("a participant unhides a conversation by deleting its visibility row", async () => {
+  let deletedId;
+  let writtenRow = false;
+  const handler = createMarketplaceConversationHandler({
+    getRequest: async () => ({ $id: "request-1", buyerId: "buyer-1", sellerId: "seller-1" }),
+    getVisibilityByRequestAndUser: async () => ({ $id: "visibility-1" }),
+    deleteVisibility: async (visibilityId) => { deletedId = visibilityId; },
+    createVisibility: async () => { writtenRow = true; },
+    updateVisibility: async () => { writtenRow = true; },
+  });
+  const { context, response } = createContext({
+    userId: "buyer-1",
+    body: { action: "set-conversation-visibility", requestId: "request-1", hidden: false },
+  });
+
+  await handler(context);
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.body, { requestId: "request-1", hidden: false, hiddenActivityAt: null });
+  assert.equal(deletedId, "visibility-1");
+  assert.equal(writtenRow, false);
+});
+
+test("unhiding a conversation that is not hidden succeeds without deleting anything", async () => {
+  let deleted = false;
+  const handler = createMarketplaceConversationHandler({
+    getRequest: async () => ({ $id: "request-1", buyerId: "buyer-1", sellerId: "seller-1" }),
+    getVisibilityByRequestAndUser: async () => null,
+    deleteVisibility: async () => { deleted = true; },
+  });
+  const { context, response } = createContext({
+    userId: "seller-1",
+    body: { action: "set-conversation-visibility", requestId: "request-1", hidden: false },
+  });
+
+  await handler(context);
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.body, { requestId: "request-1", hidden: false, hiddenActivityAt: null });
+  assert.equal(deleted, false);
+});
+
+test("a family outside a conversation cannot hide it", async () => {
+  let written = false;
+  const handler = createMarketplaceConversationHandler({
+    getRequest: async () => ({ $id: "request-1", buyerId: "buyer-1", sellerId: "seller-1", $updatedAt: "2026-05-01T10:00:00.000+00:00" }),
+    getVisibilityByRequestAndUser: async () => null,
+    createVisibility: async () => { written = true; },
+  });
+  const { context, response } = createContext({
+    userId: "other-family",
+    body: { action: "set-conversation-visibility", requestId: "request-1", hidden: true },
+  });
+
+  await handler(context);
+
+  assert.equal(response.statusCode, 403);
+  assert.equal(response.body.code, "not_participant");
+  assert.equal(written, false);
+});
+
+test("hiding a missing conversation returns conversation_not_found", async () => {
+  let written = false;
+  const handler = createMarketplaceConversationHandler({
+    getRequest: async () => {
+      const cause = new Error("Document not found");
+      cause.code = 404;
+      throw cause;
+    },
+    createVisibility: async () => { written = true; },
+  });
+  const { context, response } = createContext({
+    userId: "buyer-1",
+    body: { action: "set-conversation-visibility", requestId: "request-1", hidden: true },
+  });
+
+  await handler(context);
+
+  assert.equal(response.statusCode, 404);
+  assert.equal(response.body.code, "conversation_not_found");
+  assert.equal(written, false);
+});
+
+test("the visibility action rejects a non-boolean hidden flag", async () => {
+  let looked = false;
+  const handler = createMarketplaceConversationHandler({
+    getRequest: async () => { looked = true; return {}; },
+  });
+  const { context, response } = createContext({
+    userId: "buyer-1",
+    body: { action: "set-conversation-visibility", requestId: "request-1", hidden: "true" },
+  });
+
+  await handler(context);
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.body.code, "invalid_input");
+  assert.equal(looked, false);
+});
+
+test("the visibility action rejects an invalid request id", async () => {
+  let looked = false;
+  const handler = createMarketplaceConversationHandler({
+    getRequest: async () => { looked = true; return {}; },
+  });
+  const { context, response } = createContext({
+    userId: "buyer-1",
+    body: { action: "set-conversation-visibility", requestId: "../request", hidden: true },
+  });
+
+  await handler(context);
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.body.code, "invalid_input");
+  assert.equal(looked, false);
+});

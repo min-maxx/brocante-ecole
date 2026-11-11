@@ -277,6 +277,7 @@ export function createMarketplace({
   collectionId,
   requestsCollectionId,
   messagesCollectionId,
+  visibilityCollectionId,
   marketFunctionId,
   photosBucketId,
   missingConfiguration = [],
@@ -287,6 +288,9 @@ export function createMarketplace({
   let purchaseRequests = [];
   let buyerPurchaseRequests = [];
   let conversationMessages = [];
+  let conversationVisibility = [];
+  let showHiddenConversations = false;
+  let submittingVisibility = false;
   let view = "list";
   let selectedListingId = "";
   let selectedConversationId = "";
@@ -321,6 +325,7 @@ export function createMarketplace({
       && collectionId
       && requestsCollectionId
       && messagesCollectionId
+      && visibilityCollectionId
       && marketFunctionId
       && photosBucketId,
     );
@@ -721,19 +726,28 @@ export function createMarketplace({
       ? ""
       : `<time class="purchase-card-time" datetime="${new Date(updatedAtTimestamp).toISOString()}">${escapeHtml(relativeTimeLabel(updatedAt))}</time>`;
 
-    return `<button class="purchase-card" type="button" data-action="open-conversation" data-request-id="${escapeHtml(request.$id)}" aria-label="Ouvrir la conversation avec ${escapeHtml(otherFamily)} pour ${escapeHtml(request.listingTitle)}">
-      <span class="purchase-card-avatar" aria-hidden="true">${escapeHtml(contactInitial)}</span>
-      <span class="purchase-card-content">
-        <strong class="purchase-card-contact">${escapeHtml(otherFamily)}</strong>
-        <span class="purchase-card-preview">${escapeHtml(request.lastMessage || fallbackPreview)}</span>
-        <span class="purchase-card-item">
-          <span class="purchase-card-listing-thumb">${photoMarkup}</span>
-          <span class="purchase-card-listing-title">${escapeHtml(request.listingTitle)}</span>
-          <span class="purchase-card-listing-price">${escapeHtml(priceLabel(request.listingPrice))}</span>
+    const hidden = isConversationHidden(request);
+    return `<div class="purchase-card-row${hidden ? " is-hidden" : ""}">
+      <button class="purchase-card" type="button" data-action="open-conversation" data-request-id="${escapeHtml(request.$id)}" aria-label="Ouvrir la conversation avec ${escapeHtml(otherFamily)} pour ${escapeHtml(request.listingTitle)}">
+        <span class="purchase-card-avatar" aria-hidden="true">${escapeHtml(contactInitial)}</span>
+        <span class="purchase-card-content">
+          <strong class="purchase-card-contact">${escapeHtml(otherFamily)}${hidden ? ` <span class="purchase-card-hidden">Masquée</span>` : ""}</strong>
+          <span class="purchase-card-preview">${escapeHtml(request.lastMessage || fallbackPreview)}</span>
+          <span class="purchase-card-item">
+            <span class="purchase-card-listing-thumb">${photoMarkup}</span>
+            <span class="purchase-card-listing-title">${escapeHtml(request.listingTitle)}</span>
+            <span class="purchase-card-listing-price">${escapeHtml(priceLabel(request.listingPrice))}</span>
+          </span>
         </span>
-      </span>
-      ${timeMarkup}
-    </button>`;
+        ${timeMarkup}
+      </button>
+      ${visibilityButtonMarkup(request)}
+    </div>`;
+  }
+
+  function visibilityButtonMarkup(request) {
+    const hidden = isConversationHidden(request);
+    return `<button class="conversation-visibility" type="button" data-action="${hidden ? "show-conversation" : "hide-conversation"}" data-request-id="${escapeHtml(request.$id)}"${submittingVisibility ? " disabled" : ""}>${hidden ? "Afficher" : "Masquer"}</button>`;
   }
 
   function conversationThreadMarkup(role) {
@@ -814,8 +828,11 @@ export function createMarketplace({
       <button class="button-light conversation-back" type="button" data-action="close-conversation">← ${role === "sales" ? "Mes ventes" : "Mes achats"}</button>
       <article class="conversation-thread">
         <header class="conversation-thread-header">
-          <h1>Conversation avec ${escapeHtml(otherFamily)}</h1>
-          <p>${role === "sales" ? "Acheteur" : "Vendeur"}</p>
+          <div>
+            <h1>Conversation avec ${escapeHtml(otherFamily)}</h1>
+            <p>${role === "sales" ? "Acheteur" : "Vendeur"}</p>
+          </div>
+          ${visibilityButtonMarkup(request)}
         </header>
         <div class="conversation-listing-preview">
           <span class="purchase-card-photo">${photoMarkup}</span>
@@ -847,12 +864,21 @@ export function createMarketplace({
     const description = isSale
       ? "Vos conversations avec les acheteurs, de la plus récente à la plus ancienne."
       : "Vos conversations avec les vendeurs, de la plus récente à la plus ancienne.";
+    const hasHiddenConversations = purchaseRequests.some((request) => isConversationHidden(request));
+    const visibleRequests = purchaseRequests.filter((request) => showHiddenConversations || !isConversationHidden(request));
+    const visibilityToggleMarkup = !selectedConversationId && !loadingPurchaseRequests && (hasHiddenConversations || showHiddenConversations)
+      ? `<div class="purchase-list-toolbar">
+          <button class="text-button" type="button" data-action="toggle-hidden-conversations" aria-pressed="${showHiddenConversations}">Voir les conversations masquées</button>
+        </div>`
+      : "";
     const content = selectedConversationId
       ? conversationThreadMarkup(role)
       : loadingPurchaseRequests
         ? `<p class="market-empty" role="status">Chargement de vos conversations…</p>`
         : purchaseRequests.length
-          ? `<div class="purchase-list">${purchaseRequests.map((request) => purchaseRequestCardMarkup(request, role)).join("")}</div>`
+          ? `${visibilityToggleMarkup}${visibleRequests.length
+            ? `<div class="purchase-list">${visibleRequests.map((request) => purchaseRequestCardMarkup(request, role)).join("")}</div>`
+            : `<section class="market-empty"><h2>Toutes vos conversations sont masquées.</h2><p>Utilisez « Voir les conversations masquées » pour les retrouver.</p></section>`}`
           : `<section class="market-empty">
               <p class="market-empty-icon" aria-hidden="true">${isSale ? "🏷️" : "🛍️"}</p>
               <h2>${isSale ? "Aucune vente pour le moment" : "Aucun achat pour le moment"}</h2>
@@ -1168,6 +1194,64 @@ export function createMarketplace({
     return response;
   }
 
+  async function listConversationVisibility() {
+    const result = await databases.listDocuments(databaseId, visibilityCollectionId, [
+      Query.equal("userId", user.$id),
+      Query.limit(100),
+    ]);
+    return result.documents;
+  }
+
+  async function loadConversationVisibility() {
+    try {
+      return await listConversationVisibility();
+    } catch (error) {
+      console.error("Impossible de charger la visibilité des conversations.", error);
+      return [];
+    }
+  }
+
+  function isConversationHidden(request) {
+    const row = conversationVisibility.find((item) => item.requestId === request.$id && item.userId === user?.$id);
+    if (!row) return false;
+    return Date.parse(request.$updatedAt) <= Date.parse(row.hiddenActivityAt);
+  }
+
+  async function setConversationVisibility(requestId, hidden) {
+    if (submittingVisibility || !configReady || !user) return;
+    if (!purchaseRequests.some((item) => item.$id === requestId)) return;
+
+    submittingVisibility = true;
+    message = "";
+    render();
+    try {
+      const response = await executeMarketFunction({
+        action: "set-conversation-visibility",
+        requestId,
+        hidden,
+      });
+      conversationVisibility = [
+        ...conversationVisibility.filter((item) => item.requestId !== requestId),
+        { requestId, userId: user.$id, hiddenActivityAt: response.hiddenActivityAt ?? null },
+      ];
+      if (hidden && selectedConversationId === requestId) {
+        selectedConversationId = "";
+        conversationMessages = [];
+      }
+      message = hidden ? "La conversation est masquée." : "La conversation est de nouveau affichée.";
+      messageKind = "success";
+    } catch (error) {
+      console.error("Impossible de modifier la visibilité de la conversation.", error);
+      message = hidden
+        ? "La conversation n’a pas pu être masquée. Vérifiez votre connexion et réessayez."
+        : "La conversation n’a pas pu être affichée. Vérifiez votre connexion et réessayez.";
+      messageKind = "error";
+    } finally {
+      submittingVisibility = false;
+      render();
+    }
+  }
+
   async function loadPurchaseRequests(role = view) {
     if (!configReady) {
       setMessage("La configuration des demandes d’achat et de don est incomplète.", "configuration");
@@ -1178,12 +1262,16 @@ export function createMarketplace({
     loadingPurchaseRequests = true;
     render();
     try {
-      const result = await databases.listDocuments(databaseId, requestsCollectionId, [
-        Query.equal(role === "sales" ? "sellerId" : "buyerId", user.$id),
-        Query.orderDesc("$updatedAt"),
-        Query.limit(100),
+      const [result, visibility] = await Promise.all([
+        databases.listDocuments(databaseId, requestsCollectionId, [
+          Query.equal(role === "sales" ? "sellerId" : "buyerId", user.$id),
+          Query.orderDesc("$updatedAt"),
+          Query.limit(100),
+        ]),
+        loadConversationVisibility(),
       ]);
       purchaseRequests = sortPurchaseRequests(result.documents);
+      conversationVisibility = visibility;
       if (role === "purchases") {
         buyerPurchaseRequests = [...purchaseRequests];
         buyerPurchaseRequestsLoaded = true;
@@ -1584,6 +1672,17 @@ export function createMarketplace({
       case "open-conversation":
         await openConversation(button.dataset.requestId);
         break;
+      case "hide-conversation":
+        await setConversationVisibility(button.dataset.requestId, true);
+        break;
+      case "show-conversation":
+        await setConversationVisibility(button.dataset.requestId, false);
+        break;
+      case "toggle-hidden-conversations":
+        showHiddenConversations = !showHiddenConversations;
+        message = "";
+        render();
+        break;
       case "respond-to-offer":
         await respondToOffer(button.dataset.requestId, button.dataset.decision);
         break;
@@ -1879,6 +1978,9 @@ export function createMarketplace({
       selectedConditions = [];
       selectedItemFilters = {};
       purchaseRequests = [];
+      conversationVisibility = [];
+      showHiddenConversations = false;
+      submittingVisibility = false;
       buyerPurchaseRequests = [];
       buyerPurchaseRequestsLoaded = false;
       buyerPurchaseRequestsLoadFailed = false;
